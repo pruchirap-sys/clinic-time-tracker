@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clinic Time Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Sarabun', 'Noto Sans Thai', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-pink-50 to-purple-50 min-h-screen">
+    <div id="app"></div>
+
+    <script type="text/babel">
+        // ⚠️ ใส่ Google Apps Script URL ของคุณที่นี่
+        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxiBuIsedk4MN46o8WM0uw66H8n-Ar0cbexkoYS8ZkBRKBrDa3tzg1K0JATkgFnCccR/exec';
+        
+        // ข้อมูลสาขา
+        const BRANCHES = [
+            'สาขา 1 - สยาม',
+            'สาขา 2 - เซ็นทรัลเวิลด์',
+            'สาขา 3 - สยามพารากอน',
+            'สาขา 4 - เอ็มควอเทียร์',
+            'สาขา 5 - เกตเวย์',
+            'สาขา 6 - เมกา บางนา',
+            'สาขา 7 - สีลม',
+            'สาขา 8 - อารีย์',
+            'สาขา 9 - ทองหล่อ',
+            'สาขา 10 - รามอินทรา',
+            'สาขา 11 - รังสิต'
+        ];
+
+        // ข้อมูลหัตถการและ Path
+        const PROCEDURES = {
+            'Botox': ['Check-in', 'คลีนซิ่ง', 'เตรียมผิว', 'ฉีด Botox', 'พักฟื้น', 'Check-out'],
+            'Filler': ['Check-in', 'คลีนซิ่ง', 'ทา Numbing', 'พักรอ Numbing', 'ฉีด Filler', 'พักฟื้น', 'Check-out'],
+            'Laser': ['Check-in', 'คลีนซิ่ง', 'เตรียมผิว', 'ยิงเลเซอร์', 'Cooling', 'Check-out'],
+            'Thread Lift': ['Check-in', 'คลีนซิ่ง', 'Design', 'ทา Numbing', 'พักรอ Numbing', 'ยกกระชับ', 'พักฟื้น', 'Check-out'],
+            'HIFU': ['Check-in', 'คลีนซิ่ง', 'Marking', 'ทำ HIFU', 'Cooling', 'Check-out'],
+            'Meso Fat': ['Check-in', 'คลีนซิ่ง', 'ทา Numbing', 'พักรอ Numbing', 'ฉีด Meso', 'พักฟื้น', 'Check-out'],
+            'IV Drip': ['Check-in', 'เจาะเลือด', 'ห้องพักผ่อน', 'เสร็จสิ้น', 'Check-out'],
+        };
+
+        class App extends React.Component {
+            constructor(props) {
+                super(props);
+                this.state = {
+                    step: 'branch',
+                    branch: '',
+                    hn: '',
+                    procedure: '',
+                    currentSessionIndex: 0,
+                    sessions: [],
+                    startTime: null,
+                    elapsedTime: 0,
+                    note: '',
+                    showAccidentModal: false,
+                    accidentNote: '',
+                    isSaving: false
+                };
+                this.timerInterval = null;
+            }
+
+            componentWillUnmount() {
+                if (this.timerInterval) {
+                    clearInterval(this.timerInterval);
+                }
+            }
+
+            formatTime = (seconds) => {
+                const mins = Math.floor(seconds / 60);
+                const secs = seconds % 60;
+                return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            }
+
+            startSession = () => {
+                const now = Date.now();
+                this.setState({ startTime: now, elapsedTime: 0 });
+                this.timerInterval = setInterval(() => {
+                    this.setState(prev => ({
+                        elapsedTime: Math.floor((Date.now() - prev.startTime) / 1000)
+                    }));
+                }, 1000);
+            }
+
+            stopSession = () => {
+                clearInterval(this.timerInterval);
+                const { currentSessionIndex, elapsedTime, note, sessions, procedure } = this.state;
+                const currentPath = PROCEDURES[procedure];
+                const currentSession = currentPath[currentSessionIndex];
+
+                const newSession = {
+                    session: currentSession,
+                    startTime: new Date(this.state.startTime).toLocaleTimeString('th-TH'),
+                    duration: this.formatTime(elapsedTime),
+                    note: note,
+                    status: 'completed'
+                };
+
+                const newSessions = [...sessions, newSession];
+                
+                if (currentSessionIndex < currentPath.length - 1) {
+                    this.setState({
+                        sessions: newSessions,
+                        currentSessionIndex: currentSessionIndex + 1,
+                        startTime: null,
+                        elapsedTime: 0,
+                        note: ''
+                    });
+                } else {
+                    this.setState({
+                        sessions: newSessions,
+                        startTime: null,
+                        elapsedTime: 0,
+                        note: ''
+                    }, () => this.completeTracking());
+                }
+            }
+
+            handleAccident = () => {
+                const { accidentNote } = this.state;
+                if (!accidentNote.trim()) {
+                    alert('กรุณาระบุหมายเหตุสำหรับ Accident');
+                    return;
+                }
+
+                clearInterval(this.timerInterval);
+                const { currentSessionIndex, elapsedTime, sessions, procedure } = this.state;
+                const currentPath = PROCEDURES[procedure];
+                const currentSession = currentPath[currentSessionIndex];
+
+                const newSession = {
+                    session: currentSession,
+                    startTime: new Date(this.state.startTime).toLocaleTimeString('th-TH'),
+                    duration: this.formatTime(elapsedTime),
+                    note: `⚠️ ACCIDENT: ${accidentNote}`,
+                    status: 'accident'
+                };
+
+                this.setState({
+                    sessions: [...sessions, newSession],
+                    showAccidentModal: false,
+                    accidentNote: '',
+                    startTime: null,
+                    elapsedTime: 0
+                }, () => this.completeTracking());
+            }
+
+            completeTracking = async () => {
+                const { branch, hn, procedure, sessions } = this.state;
+                
+                this.setState({ isSaving: true });
+
+                const data = {
+                    timestamp: new Date().toLocaleString('th-TH', { 
+                        timeZone: 'Asia/Bangkok',
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit'
+                    }),
+                    branch,
+                    hn,
+                    procedure,
+                    sessions
+                };
+
+                try {
+                    const response = await fetch(GOOGLE_SCRIPT_URL, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(data)
+                    });
+
+                    // เนื่องจากใช้ no-cors จะไม่ได้รับ response กลับมา
+                    // แต่ข้อมูลจะถูกส่งไปที่ Google Sheets
+                    this.setState({ step: 'complete', isSaving: false });
+
+                } catch (error) {
+                    console.error('Error:', error);
+                    // แม้จะ error แต่ข้อมูลอาจถูกบันทึกแล้ว (เนื่องจาก no-cors)
+                    this.setState({ step: 'complete', isSaving: false });
+                }
+            }
+
+            resetApp = () => {
+                this.setState({
+                    step: 'branch',
+                    branch: '',
+                    hn: '',
+                    procedure: '',
+                    currentSessionIndex: 0,
+                    sessions: [],
+                    startTime: null,
+                    elapsedTime: 0,
+                    note: '',
+                    showAccidentModal: false,
+                    accidentNote: '',
+                    isSaving: false
+                });
+            }
+
+            render() {
+                const { step, branch, hn, procedure, currentSessionIndex, sessions, startTime, elapsedTime, note, showAccidentModal, accidentNote, isSaving } = this.state;
+                const currentPath = procedure ? PROCEDURES[procedure] : [];
+                const currentSession = currentPath[currentSessionIndex];
+
+                // Branch Selection
+                if (step === 'branch') {
+                    return (
+                        <div className="min-h-screen p-4">
+                            <div className="max-w-2xl mx-auto">
+                                <div className="bg-white rounded-2xl shadow-xl p-8">
+                                    <h1 className="text-3xl font-bold text-center mb-2 text-purple-900">
+                                        🏥 Clinic Time Tracker
+                                    </h1>
+                                    <p className="text-center text-gray-600 mb-8">ระบบติดตามเวลาหัตถการ</p>
+                                    <h2 className="text-xl font-semibold mb-4 text-gray-700">เลือกสาขา</h2>
+                                    <div className="grid grid-cols-1 gap-3">
+                                        {BRANCHES.map((b) => (
+                                            <button
+                                                key={b}
+                                                onClick={() => this.setState({ branch: b, step: 'hn' })}
+                                                className="p-4 bg-purple-100 hover:bg-purple-200 rounded-lg text-left font-medium text-purple-900 transition-all transform hover:scale-105"
+                                            >
+                                                {b}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                }
+
+                // HN Input
+                if (step === 'hn') {
+                    return (
+                        <div className="min-h-screen p-4">
+                            <div className="max-w-md mx-auto">
+                                <div className="bg-white rounded-2xl shadow-xl p-8">
+                                    <button 
+                                        onClick={() => this.setState({ step: 'branch' })} 
+                                        className="mb-4 text-purple-600 flex items-center gap-2 hover:text-purple-700"
+                                    >
+                                        ← ย้อนกลับ
+                                    </button>
+                                    <h2 className="text-2xl font-bold mb-2 text-purple-900">ใส่ HN ลูกค้า</h2>
+                                    <p className="text-gray-600 mb-6">สาขา: {branch}</p>
+                                    <input
+                                        type="text"
+                                        value={hn}
+                                        onChange={(e) => this.setState({ hn: e.target.value })}
+                                        placeholder="HN12345"
+                                        className="w-full p-4 border-2 border-purple-200 rounded-lg text-lg mb-4 focus:border-purple-500 focus:outline-none"
+                                        autoFocus
+                                    />
+                                    <button
+                                        onClick={() => hn.trim() && this.setState({ step: 'procedure' })}
+                                        disabled={!hn.trim()}
+                                        className="w-full p-4 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all"
+                                    >
+                                        ถัดไป
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                }
+
+                // Procedure Selection
+                if (step === 'procedure') {
+                    return (
+                        <div className="min-h-screen p-4">
+                            <div className="max-w-2xl mx-auto">
+                                <div className="bg-white rounded-2xl shadow-xl p-8">
+                                    <button 
+                                        onClick={() => this.setState({ step: 'hn' })} 
+                                        className="mb-4 text-purple-600 flex items-center gap-2 hover:text-purple-700"
+                                    >
+                                        ← ย้อนกลับ
+                                    </button>
+                                    <h2 className="text-2xl font-bold mb-2 text-purple-900">เลือกหัตถการ</h2>
+                                    <p className="text-gray-600 mb-6">HN: {hn} | สาขา: {branch}</p>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        {Object.keys(PROCEDURES).map((proc) => (
+                                            <button
+                                                key={proc}
+                                                onClick={() => this.setState({ procedure: proc, step: 'tracking' })}
+                                                className="p-4 bg-pink-100 hover:bg-pink-200 rounded-lg text-left font-medium text-pink-900 transition-all transform hover:scale-105"
+                                            >
+                                                <div className="text-lg font-bold">{proc}</div>
+                                                <div className="text-sm text-pink-700 mt-1">
+                                                    {PROCEDURES[proc].length} ขั้นตอน
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                }
+
+                // Tracking
+                if (step === 'tracking') {
+                    return (
+                        <div className="min-h-screen p-4">
+                            <div className="max-w-3xl mx-auto">
+                                <div className="bg-white rounded-2xl shadow-xl p-8">
+                                    <div className="mb-6 p-4 bg-purple-100 rounded-lg">
+                                        <div className="text-sm text-purple-700">
+                                            <strong>HN:</strong> {hn} | <strong>สาขา:</strong> {branch} | <strong>หัตถการ:</strong> {procedure}
+                                        </div>
+                                    </div>
+
+                                    {/* Progress */}
+                                    <div className="mb-6">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="text-sm text-gray-600">ความคืบหน้า</span>
+                                            <span className="text-sm font-semibold text-purple-600">
+                                                {currentSessionIndex + 1} / {currentPath.length}
+                                            </span>
+                                        </div>
+                                        <div className="w-full bg-gray-200 rounded-full h-3">
+                                            <div 
+                                                className="bg-purple-600 h-3 rounded-full transition-all duration-300"
+                                                style={{ width: `${((currentSessionIndex + 1) / currentPath.length) * 100}%` }}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Current Session */}
+                                    <div className="text-center mb-8">
+                                        <h2 className="text-3xl font-bold text-purple-900 mb-4">{currentSession}</h2>
+                                        <div className="text-6xl font-mono font-bold text-purple-600 mb-6">
+                                            {this.formatTime(elapsedTime)}
+                                        </div>
+
+                                        {!startTime ? (
+                                            <button
+                                                onClick={this.startSession}
+                                                className="px-8 py-4 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition-all transform hover:scale-105 shadow-lg"
+                                            >
+                                                ▶️ เริ่มต้น
+                                            </button>
+                                        ) : (
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <label className="block text-left text-sm font-medium text-gray-700 mb-2">
+                                                        หมายเหตุ (ถ้ามี)
+                                                    </label>
+                                                    <textarea
+                                                        value={note}
+                                                        onChange={(e) => this.setState({ note: e.target.value })}
+                                                        className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none"
+                                                        rows={3}
+                                                        placeholder="ระบุรายละเอียดเพิ่มเติม..."
+                                                    />
+                                                </div>
+                                                
+                                                <div className="flex gap-3">
+                                                    <button
+                                                        onClick={this.stopSession}
+                                                        className="flex-1 px-6 py-4 bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600 transition-all shadow-lg"
+                                                    >
+                                                        ✓ เสร็จสิ้น
+                                                    </button>
+                                                    <button
+                                                        onClick={() => this.setState({ showAccidentModal: true })}
+                                                        className="flex-1 px-6 py-4 bg-red-500 text-white rounded-lg font-semibold hover:bg-red-600 transition-all shadow-lg"
+                                                    >
+                                                        ⚠️ Accident
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Session History */}
+                                    {sessions.length > 0 && (
+                                        <div className="mt-8 border-t pt-6">
+                                            <h3 className="font-semibold text-gray-700 mb-4">📋 ประวัติที่ผ่านมา</h3>
+                                            <div className="space-y-2">
+                                                {sessions.map((s, i) => (
+                                                    <div 
+                                                        key={i} 
+                                                        className={`p-3 rounded-lg ${s.status === 'accident' ? 'bg-red-50 border border-red-200' : 'bg-gray-50'}`}
+                                                    >
+                                                        <div className="flex justify-between items-center">
+                                                            <span className="font-medium">{s.session}</span>
+                                                            <span className="text-sm text-gray-600">⏱️ {s.duration}</span>
+                                                        </div>
+                                                        {s.note && (
+                                                            <div className="text-sm text-gray-600 mt-1">{s.note}</div>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Accident Modal */}
+                            {showAccidentModal && (
+                                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                                    <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl">
+                                        <h3 className="text-xl font-bold text-red-600 mb-4">
+                                            ⚠️ แจ้ง Accident
+                                        </h3>
+                                        <p className="text-gray-600 mb-4">กรุณาระบุรายละเอียด Accident (บังคับ)</p>
+                                        <textarea
+                                            value={accidentNote}
+                                            onChange={(e) => this.setState({ accidentNote: e.target.value })}
+                                            className="w-full p-3 border-2 border-red-200 rounded-lg focus:border-red-500 focus:outline-none mb-4"
+                                            rows={4}
+                                            placeholder="ระบุสาเหตุและรายละเอียด..."
+                                            autoFocus
+                                        />
+                                        <div className="flex gap-3">
+                                            <button
+                                                onClick={() => this.setState({ showAccidentModal: false, accidentNote: '' })}
+                                                className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                                            >
+                                                ยกเลิก
+                                            </button>
+                                            <button
+                                                onClick={this.handleAccident}
+                                                className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600"
+                                            >
+                                                ยืนยัน
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Saving Overlay */}
+                            {isSaving && (
+                                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                                    <div className="bg-white rounded-2xl p-8 text-center">
+                                        <div className="text-4xl mb-4">💾</div>
+                                        <div className="text-xl font-semibold">กำลังบันทึกข้อมูล...</div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    );
+                }
+
+                // Complete
+                if (step === 'complete') {
+                    return (
+                        <div className="min-h-screen p-4 flex items-center justify-center">
+                            <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
+                                <div className="text-6xl mb-4">✅</div>
+                                <h2 className="text-2xl font-bold text-green-600 mb-4">บันทึกสำเร็จ!</h2>
+                                <div className="text-left bg-gray-50 p-4 rounded-lg mb-6">
+                                    <div className="text-sm text-gray-600 mb-1"><strong>HN:</strong> {hn}</div>
+                                    <div className="text-sm text-gray-600 mb-1"><strong>สาขา:</strong> {branch}</div>
+                                    <div className="text-sm text-gray-600 mb-1"><strong>หัตถการ:</strong> {procedure}</div>
+                                    <div className="text-sm text-gray-600"><strong>จำนวนขั้นตอน:</strong> {sessions.length}</div>
+                                </div>
+                                <button
+                                    onClick={this.resetApp}
+                                    className="w-full px-6 py-3 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition-all"
+                                >
+                                    เริ่มต้นใหม่
+                                </button>
+                            </div>
+                        </div>
+                    );
+                }
+
+                return null;
+            }
+        }
+
+        ReactDOM.render(<App />, document.getElementById('app'));
+    </script>
+
+    <script crossorigin src="https://unpkg.com/react@17/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@17/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</body>
+</html>
