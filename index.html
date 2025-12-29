@@ -11,7 +11,7 @@
         }
     </style>
 </head>
-<body class="bg-gradient-to-br from-pink-50 to-purple-50 min-h-screen">
+<body class="bg-gradient-to-br from-pink-50 to-pink-50 min-h-screen">
     <div id="app"></div>
 
     <script type="text/babel">
@@ -20,17 +20,17 @@
         
         // ข้อมูลสาขา
         const BRANCHES = [
-            'สาขา 1 - สยาม',
-            'สาขา 2 - เซ็นทรัลเวิลด์',
-            'สาขา 3 - สยามพารากอน',
-            'สาขา 4 - เอ็มควอเทียร์',
-            'สาขา 5 - เกตเวย์',
-            'สาขา 6 - เมกา บางนา',
-            'สาขา 7 - สีลม',
-            'สาขา 8 - อารีย์',
-            'สาขา 9 - ทองหล่อ',
-            'สาขา 10 - รามอินทรา',
-            'สาขา 11 - รังสิต'
+            '001 - แพรกษา',
+            '002 - อโศก',
+            '003 - พระราม2x',
+            '004 - ลาดพร้าว',
+            '005 - รังสิต',
+            '006 - ชลบุรี',
+            '007 - พิษณุโลก',
+            '008 - ขอนแก่น',
+            '009 - พระราม9',
+            '010 - โคราช',
+            '011 - ภูเก็ต'
         ];
 
         // ข้อมูลหัตถการและ Path
@@ -219,7 +219,7 @@
                         <div className="min-h-screen p-4">
                             <div className="max-w-2xl mx-auto">
                                 <div className="bg-white rounded-2xl shadow-xl p-8">
-                                    <h1 className="text-3xl font-bold text-center mb-2 text-purple-900">
+                                    <h1 className="text-3xl font-bold text-center mb-2 text-pink-900">
                                         🏥 Clinic Time Tracker
                                     </h1>
                                     <p className="text-center text-gray-600 mb-8">ระบบติดตามเวลาหัตถการ</p>
@@ -229,7 +229,7 @@
                                             <button
                                                 key={b}
                                                 onClick={() => this.setState({ branch: b, step: 'hn' })}
-                                                className="p-4 bg-purple-100 hover:bg-purple-200 rounded-lg text-left font-medium text-purple-900 transition-all transform hover:scale-105"
+                                                className="p-4 bg-pink-100 hover:bg-pink-200 rounded-lg text-left font-medium text-pink-900 transition-all transform hover:scale-105"
                                             >
                                                 {b}
                                             </button>
@@ -249,24 +249,24 @@
                                 <div className="bg-white rounded-2xl shadow-xl p-8">
                                     <button 
                                         onClick={() => this.setState({ step: 'branch' })} 
-                                        className="mb-4 text-purple-600 flex items-center gap-2 hover:text-purple-700"
+                                        className="mb-4 text-pink-600 flex items-center gap-2 hover:text-pink-700"
                                     >
                                         ← ย้อนกลับ
                                     </button>
-                                    <h2 className="text-2xl font-bold mb-2 text-purple-900">ใส่ HN ลูกค้า</h2>
+                                    <h2 className="text-2xl font-bold mb-2 text-pink-900">ใส่ HN ลูกค้า</h2>
                                     <p className="text-gray-600 mb-6">สาขา: {branch}</p>
                                     <input
                                         type="text"
                                         value={hn}
                                         onChange={(e) => this.setState({ hn: e.target.value })}
                                         placeholder="HN12345"
-                                        className="w-full p-4 border-2 border-purple-200 rounded-lg text-lg mb-4 focus:border-purple-500 focus:outline-none"
+                                        className="w-full p-4 border-2 border-pink-200 rounded-lg text-lg mb-4 focus:border-pink-500 focus:outline-none"
                                         autoFocus
                                     />
                                     <button
                                         onClick={() => hn.trim() && this.setState({ step: 'procedure' })}
                                         disabled={!hn.trim()}
-                                        className="w-full p-4 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all"
+                                        className="w-full p-4 bg-pink-600 text-white rounded-lg font-semibold hover:bg-pink-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all"
                                     >
                                         ถัดไป
                                     </button>
@@ -284,11 +284,11 @@
                                 <div className="bg-white rounded-2xl shadow-xl p-8">
                                     <button 
                                         onClick={() => this.setState({ step: 'hn' })} 
-                                        className="mb-4 text-purple-600 flex items-center gap-2 hover:text-purple-700"
+                                        className="mb-4 text-pink-600 flex items-center gap-2 hover:text-pink-700"
                                     >
                                         ← ย้อนกลับ
                                     </button>
-                                    <h2 className="text-2xl font-bold mb-2 text-purple-900">เลือกหัตถการ</h2>
+                                    <h2 className="text-2xl font-bold mb-2 text-pink-900">เลือกหัตถการ</h2>
                                     <p className="text-gray-600 mb-6">HN: {hn} | สาขา: {branch}</p>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                         {Object.keys(PROCEDURES).map((proc) => (
@@ -316,8 +316,8 @@
                         <div className="min-h-screen p-4">
                             <div className="max-w-3xl mx-auto">
                                 <div className="bg-white rounded-2xl shadow-xl p-8">
-                                    <div className="mb-6 p-4 bg-purple-100 rounded-lg">
-                                        <div className="text-sm text-purple-700">
+                                    <div className="mb-6 p-4 bg-pink-100 rounded-lg">
+                                        <div className="text-sm text-pink-700">
                                             <strong>HN:</strong> {hn} | <strong>สาขา:</strong> {branch} | <strong>หัตถการ:</strong> {procedure}
                                         </div>
                                     </div>
@@ -326,13 +326,13 @@
                                     <div className="mb-6">
                                         <div className="flex justify-between items-center mb-2">
                                             <span className="text-sm text-gray-600">ความคืบหน้า</span>
-                                            <span className="text-sm font-semibold text-purple-600">
+                                            <span className="text-sm font-semibold text-pink-600">
                                                 {currentSessionIndex + 1} / {currentPath.length}
                                             </span>
                                         </div>
                                         <div className="w-full bg-gray-200 rounded-full h-3">
                                             <div 
-                                                className="bg-purple-600 h-3 rounded-full transition-all duration-300"
+                                                className="bg-pink-600 h-3 rounded-full transition-all duration-300"
                                                 style={{ width: `${((currentSessionIndex + 1) / currentPath.length) * 100}%` }}
                                             />
                                         </div>
@@ -340,8 +340,8 @@
 
                                     {/* Current Session */}
                                     <div className="text-center mb-8">
-                                        <h2 className="text-3xl font-bold text-purple-900 mb-4">{currentSession}</h2>
-                                        <div className="text-6xl font-mono font-bold text-purple-600 mb-6">
+                                        <h2 className="text-3xl font-bold text-pink-900 mb-4">{currentSession}</h2>
+                                        <div className="text-6xl font-mono font-bold text-pink-600 mb-6">
                                             {this.formatTime(elapsedTime)}
                                         </div>
 
@@ -361,7 +361,7 @@
                                                     <textarea
                                                         value={note}
                                                         onChange={(e) => this.setState({ note: e.target.value })}
-                                                        className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none"
+                                                        className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-pink-500 focus:outline-none"
                                                         rows={3}
                                                         placeholder="ระบุรายละเอียดเพิ่มเติม..."
                                                     />
@@ -472,7 +472,7 @@
                                 </div>
                                 <button
                                     onClick={this.resetApp}
-                                    className="w-full px-6 py-3 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition-all"
+                                    className="w-full px-6 py-3 bg-pink-600 text-white rounded-lg font-semibold hover:bg-pink-700 transition-all"
                                 >
                                     เริ่มต้นใหม่
                                 </button>
@@ -492,4 +492,5 @@
     <script crossorigin src="https://unpkg.com/react-dom@17/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </body>
+
 </html>
