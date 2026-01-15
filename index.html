@@ -1,497 +1,92 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Emma Clinic - Time Tracker</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body { font-family: 'Sarabun', 'Noto Sans Thai', sans-serif; }
-        @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
-    </style>
+  <meta charset="UTF-8">
+  <title>Emma Clinic - Time Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-50">
-    <div id="app"></div>
 
-    <script type="text/babel">
-        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyhJvSH2NcWceeqhjBv2UZ1Ycz8-mTarmW2kE7fpJeqFu1_a2XcvBKx8MXO55BLjCcQ/exec';
-        
-        const BRANCHES = [
-            { code: '001', name: 'แพรกษา' },
-            { code: '002', name: 'อโศก' },
-            { code: '003', name: 'พระราม2' },
-            { code: '004', name: 'ลาดพร้าว' },
-            { code: '005', name: 'รังสิต' },
-            { code: '006', name: 'ชลบุรี' },
-            { code: '007', name: 'พิษณุโลก' },
-            { code: '008', name: 'ขอนแก่น' },
-            { code: '009', name: 'พระราม9' },
-            { code: '010', name: 'โคราช' },
-            { code: '011', name: 'ภูเก็ต' }
-        ];
+<body class="bg-gray-100 min-h-screen flex justify-center items-center">
 
-        const PROCEDURES = {
-            'Botox': ['Check-in', 'คลีนซิ่ง', 'เตรียมผิว', 'ฉีด Botox', 'พักฟื้น', 'Check-out'],
-            'Filler': ['Check-in', 'คลีนซิ่ง', 'ทา Numbing', 'พักรอ Numbing', 'ฉีด Filler', 'พักฟื้น', 'Check-out'],
-            'Laser': ['Check-in', 'คลีนซิ่ง', 'เตรียมผิว', 'ยิงเลเซอร์', 'Cooling', 'Check-out'],
-            'Thread Lift': ['Check-in', 'คลีนซิ่ง', 'Design', 'ทา Numbing', 'พักรอ Numbing', 'ยกกระชับ', 'พักฟื้น', 'Check-out'],
-            'HIFU': ['Check-in', 'คลีนซิ่ง', 'Marking', 'ทำ HIFU', 'Cooling', 'Check-out'],
-            'Meso Fat': ['Check-in', 'คลีนซิ่ง', 'ทา Numbing', 'พักรอ Numbing', 'ฉีด Meso', 'พักฟื้น', 'Check-out'],
-            'IV Drip': ['Check-in', 'เจาะเลือด', 'ห้องพักผ่อน', 'เสร็จสิ้น', 'Check-out'],
-        };
+<div class="bg-white p-6 rounded-xl shadow w-full max-w-md">
+  <h1 class="text-xl font-bold text-center mb-4">Clinic Time Tracker</h1>
 
-        class App extends React.Component {
-            constructor(props) {
-                super(props);
-                this.state = {
-                    view: 'dashboard', // dashboard, register, tracking
-                    selectedBranch: '',
-                    customers: [],
-                    
-                    // Registration
-                    regHN: '',
-                    regName: '',
-                    regPhone: '',
-                    
-                    // Tracking
-                    currentCustomer: null,
-                    procedure: '',
-                    currentSessionIndex: 0,
-                    sessions: [],
-                    startTime: null,
-                    elapsedTime: 0,
-                    note: '',
-                    showAccidentModal: false,
-                    accidentNote: '',
-                    
-                    stats: {
-                        waiting: 0,
-                        inService: 0,
-                        completed: 0,
-                        avgTime: '9 นาที'
-                    }
-                };
-                this.timerInterval = null;
-            }
+  <input id="branch" placeholder="สาขา" class="w-full border p-2 rounded mb-2">
+  <input id="hn" placeholder="HN" class="w-full border p-2 rounded mb-2">
+  <input id="name" placeholder="ชื่อลูกค้า" class="w-full border p-2 rounded mb-2">
+  <input id="procedure" placeholder="หัตถการ" class="w-full border p-2 rounded mb-2">
 
-            componentDidMount() {
-                this.loadCustomers();
-                this.loadInterval = setInterval(() => this.loadCustomers(), 10000);
-            }
+  <select id="session" class="w-full border p-2 rounded mb-3">
+    <option>Check-in</option>
+    <option>คลีนซิ่ง</option>
+    <option>ทำหัตถการ</option>
+    <option>Check-out</option>
+  </select>
 
-            componentWillUnmount() {
-                clearInterval(this.timerInterval);
-                clearInterval(this.loadInterval);
-            }
+  <div class="flex gap-2 mb-3">
+    <button onclick="startSession()" class="flex-1 bg-green-500 text-white p-2 rounded">START</button>
+    <button onclick="stopSession()" class="flex-1 bg-red-500 text-white p-2 rounded">STOP</button>
+  </div>
 
-            loadCustomers = async () => {
-                try {
-                    const response = await fetch(GOOGLE_SCRIPT_URL, {
-                        method: 'POST',
-                        body: JSON.stringify({ action: 'get_customers' })
-                    });
-                    
-                    // Mock data for demo
-                    const mockCustomers = [
-                        { hn: '0010000675', name: 'พัชรพร', phone: '0812345678', status: 'waiting', branch: this.state.selectedBranch || '001 - แพรกษา', timestamp: new Date().toLocaleString('th-TH') }
-                    ];
-                    
-                    this.setState({ 
-                        customers: mockCustomers,
-                        stats: {
-                            waiting: mockCustomers.filter(c => c.status === 'waiting').length,
-                            inService: mockCustomers.filter(c => c.status === 'in-service').length,
-                            completed: mockCustomers.filter(c => c.status === 'completed').length,
-                            avgTime: '9 นาที'
-                        }
-                    });
-                } catch (error) {
-                    console.error('Load error:', error);
-                }
-            }
+  <button onclick="submitAll()" class="w-full bg-blue-600 text-white p-2 rounded">
+    บันทึกทั้งหมด
+  </button>
 
-            registerCustomer = async () => {
-                const { regHN, regName, regPhone, selectedBranch } = this.state;
-                
-                if (!regHN || !regName || !regPhone || !selectedBranch) {
-                    alert('กรุณากรอกข้อมูลให้ครบถ้วน');
-                    return;
-                }
+  <p id="status" class="text-center mt-2 text-sm"></p>
+</div>
 
-                try {
-                    await fetch(GOOGLE_SCRIPT_URL, {
-                        method: 'POST',
-                        mode: 'no-cors',
-                        body: JSON.stringify({
-                            action: 'register',
-                            branch: selectedBranch,
-                            hn: regHN,
-                            name: regName,
-                            phone: regPhone
-                        })
-                    });
+<script>
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyhJvSH2NcWceeqhjBv2UZ1Ycz8-mTarmW2kE7fpJeqFu1_a2XcvBKx8MXO55BLjCcQ/exec";
 
-                    alert('ลงทะเบียนสำเร็จ!');
-                    this.setState({ 
-                        view: 'dashboard',
-                        regHN: '',
-                        regName: '',
-                        regPhone: ''
-                    });
-                    this.loadCustomers();
-                } catch (error) {
-                    console.error('Register error:', error);
-                }
-            }
 
-            startTracking = (customer) => {
-                this.setState({
-                    view: 'tracking',
-                    currentCustomer: customer,
-                    currentSessionIndex: 0,
-                    sessions: [],
-                    procedure: ''
-                });
-            }
+let currentStart = null;
+let sessions = [];
 
-            formatTime = (seconds) => {
-                const mins = Math.floor(seconds / 60);
-                const secs = seconds % 60;
-                return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-            }
+function startSession() {
+  currentStart = new Date();
+  status.innerText = "เริ่มจับเวลาแล้ว";
+}
 
-            startSession = () => {
-                const now = Date.now();
-                this.setState({ startTime: now, elapsedTime: 0 });
-                this.timerInterval = setInterval(() => {
-                    this.setState(prev => ({
-                        elapsedTime: Math.floor((Date.now() - prev.startTime) / 1000)
-                    }));
-                }, 1000);
-            }
+function stopSession() {
+  if (!currentStart) return;
 
-            stopSession = () => {
-                clearInterval(this.timerInterval);
-                const { currentSessionIndex, elapsedTime, note, sessions, procedure } = this.state;
-                const currentPath = PROCEDURES[procedure];
-                const currentSession = currentPath[currentSessionIndex];
+  const end = new Date();
+  const duration = Math.round((end - currentStart) / 60000);
 
-                const newSession = {
-                    session: currentSession,
-                    startTime: new Date(this.state.startTime).toLocaleTimeString('th-TH'),
-                    duration: this.formatTime(elapsedTime),
-                    note: note,
-                    status: 'completed'
-                };
+  sessions.push({
+    session: session.value,
+    startTime: currentStart.toLocaleTimeString(),
+    duration: duration,
+    status: "completed"
+  });
 
-                const newSessions = [...sessions, newSession];
-                
-                if (currentSessionIndex < currentPath.length - 1) {
-                    this.setState({
-                        sessions: newSessions,
-                        currentSessionIndex: currentSessionIndex + 1,
-                        startTime: null,
-                        elapsedTime: 0,
-                        note: ''
-                    });
-                } else {
-                    this.completeTracking(newSessions);
-                }
-            }
+  currentStart = null;
+  status.innerText = "บันทึก session แล้ว";
+}
 
-            completeTracking = async (finalSessions) => {
-                const { currentCustomer, procedure } = this.state;
-                
-                const data = {
-                    action: 'save_sessions',
-                    timestamp: new Date().toLocaleString('th-TH'),
-                    branch: currentCustomer.branch,
-                    hn: currentCustomer.hn,
-                    name: currentCustomer.name,
-                    procedure,
-                    sessions: finalSessions
-                };
+function submitAll() {
+  fetch(SCRIPT_URL, {
+    method: "POST",
+    body: JSON.stringify({
+      action: "save_sessions",
+      timestamp: new Date().toLocaleString('th-TH'),
+      branch: branch.value,
+      hn: hn.value,
+      name: name.value,
+      procedure: procedure.value,
+      sessions: sessions
+    })
+  })
+  .then(r => r.json())
+  .then(() => {
+    status.innerText = "บันทึกลงระบบเรียบร้อย";
+    sessions = [];
+  })
+  .catch(() => {
+    status.innerText = "เกิดข้อผิดพลาด";
+  });
+}
+</script>
 
-                try {
-                    await fetch(GOOGLE_SCRIPT_URL, {
-                        method: 'POST',
-                        mode: 'no-cors',
-                        body: JSON.stringify(data)
-                    });
-
-                    alert('บันทึกสำเร็จ!');
-                    this.setState({ view: 'dashboard' });
-                    this.loadCustomers();
-                } catch (error) {
-                    console.error('Save error:', error);
-                }
-            }
-
-            renderDashboard() {
-                const { selectedBranch, customers, stats } = this.state;
-
-                return (
-                    <div className="min-h-screen bg-gray-50">
-                        {/* Header */}
-                        <div className="bg-white border-b">
-                            <div className="max-w-7xl mx-auto px-4 py-4">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-12 h-12 bg-pink-100 rounded-full flex items-center justify-center">
-                                            <span className="text-pink-600 font-bold">M</span>
-                                        </div>
-                                        <div>
-                                            <h1 className="text-xl font-bold text-gray-900">Emma Clinic</h1>
-                                            <p className="text-sm text-gray-600">สาขา: แพรกษา</p>
-                                        </div>
-                                    </div>
-                                    
-                                    <div className="flex items-center gap-4">
-                                        <select 
-                                            value={selectedBranch}
-                                            onChange={(e) => this.setState({ selectedBranch: e.target.value })}
-                                            className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-                                        >
-                                            <option value="">แพรกษา</option>
-                                            {BRANCHES.map(b => (
-                                                <option key={b.code} value={`${b.code} - ${b.name}`}>
-                                                    {b.name}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        
-                                        <button 
-                                            onClick={() => this.setState({ view: 'register' })}
-                                            className="px-6 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 font-medium"
-                                        >
-                                            + ลงทะเบียน
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="max-w-7xl mx-auto px-4 py-6">
-                            {/* Dashboard Title */}
-                            <div className="mb-6">
-                                <h2 className="text-2xl font-bold text-gray-900">แดชบอร์ด <span className="text-orange-500">องศุกลาข</span></h2>
-                                <p className="text-gray-600 text-sm">วันพฤหัสบดีที่ 15 มกราคม 2569</p>
-                            </div>
-
-                            {/* Stats Cards */}
-                            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
-                                <div className="bg-white rounded-lg p-4 shadow-sm">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 bg-pink-100 rounded-full flex items-center justify-center">
-                                            <span className="text-pink-600">👥</span>
-                                        </div>
-                                        <div>
-                                            <div className="text-2xl font-bold text-gray-900">2</div>
-                                            <div className="text-sm text-gray-600">ลงทะเบียนใหม่</div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="bg-white rounded-lg p-4 shadow-sm">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
-                                            <span className="text-yellow-600">⏳</span>
-                                        </div>
-                                        <div>
-                                            <div className="text-2xl font-bold text-gray-900">{stats.waiting}</div>
-                                            <div className="text-sm text-gray-600">รอคิวคลีนิก</div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="bg-white rounded-lg p-4 shadow-sm">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
-                                            <span className="text-orange-600">📋</span>
-                                        </div>
-                                        <div>
-                                            <div className="text-2xl font-bold text-gray-900">{stats.inService}</div>
-                                            <div className="text-sm text-gray-600">กำลังรับบริการ</div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="bg-white rounded-lg p-4 shadow-sm">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                                            <span className="text-green-600">✓</span>
-                                        </div>
-                                        <div>
-                                            <div className="text-2xl font-bold text-gray-900">{stats.completed}</div>
-                                            <div className="text-sm text-gray-600">เสร็จสิ้นแล้ว</div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="bg-white rounded-lg p-4 shadow-sm">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                                            <span className="text-blue-600">⏱️</span>
-                                        </div>
-                                        <div>
-                                            <div className="text-2xl font-bold text-gray-900">{stats.avgTime}</div>
-                                            <div className="text-sm text-gray-600">เวลาเฉลี่ย (รวมคลินิก)</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Customer Queue */}
-                            <div className="bg-white rounded-lg shadow-sm p-6">
-                                <div className="flex items-center justify-between mb-4">
-                                    <h3 className="text-lg font-bold text-gray-900">
-                                        🩺 รายชื่อลูกค้า 
-                                        <span className="ml-2 px-3 py-1 bg-pink-100 text-pink-600 rounded-full text-sm">
-                                            {customers.length}
-                                        </span>
-                                    </h3>
-                                </div>
-
-                                <div className="space-y-3">
-                                    {customers.map((customer, idx) => (
-                                        <div key={idx} className="flex items-center justify-between p-4 border-l-4 border-pink-500 bg-gray-50 rounded-lg hover:shadow-md transition-shadow">
-                                            <div className="flex items-center gap-4">
-                                                <div className="w-10 h-10 bg-pink-100 rounded-full flex items-center justify-center">
-                                                    <span className="text-pink-600">👤</span>
-                                                </div>
-                                                <div>
-                                                    <div className="font-bold text-gray-900">{customer.name}</div>
-                                                    <div className="text-sm text-gray-600">HN: {customer.hn}</div>
-                                                </div>
-                                            </div>
-                                            
-                                            <div className="flex items-center gap-4">
-                                                <span className="px-4 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-medium">
-                                                    เช็ค Sales: consult
-                                                </span>
-                                                <span className="text-sm text-gray-600">⏱️ 09:56</span>
-                                                <span className="text-sm text-gray-600">👤 2 นาที</span>
-                                                <button 
-                                                    onClick={() => this.startTracking(customer)}
-                                                    className="px-4 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600"
-                                                >
-                                                    เริ่ม Track
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                );
-            }
-
-            renderRegister() {
-                const { regHN, regName, regPhone, selectedBranch } = this.state;
-
-                return (
-                    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-                        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
-                            <button 
-                                onClick={() => this.setState({ view: 'dashboard' })}
-                                className="mb-6 text-pink-600 hover:text-pink-700"
-                            >
-                                ← ย้อนกลับ
-                            </button>
-
-                            <div className="text-center mb-8">
-                                <h2 className="text-2xl font-bold text-pink-900 mb-2">
-                                    👤 ลงทะเบียนลูกค้าเข้ารับบริการ
-                                </h2>
-                                <p className="text-gray-600">สาขา: {selectedBranch || 'แพรกษา'}</p>
-                            </div>
-
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">HN</label>
-                                    <input
-                                        type="text"
-                                        value={regHN}
-                                        onChange={(e) => this.setState({ regHN: e.target.value })}
-                                        placeholder="กรอกหมายเลข"
-                                        className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-pink-500 focus:outline-none"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">ชื่อ-นามสกุล</label>
-                                    <input
-                                        type="text"
-                                        value={regName}
-                                        onChange={(e) => this.setState({ regName: e.target.value })}
-                                        placeholder="กรอกหมายเลข"
-                                        className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-pink-500 focus:outline-none"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">เบอร์โทรศัพท์</label>
-                                    <input
-                                        type="tel"
-                                        value={regPhone}
-                                        onChange={(e) => this.setState({ regPhone: e.target.value })}
-                                        placeholder="กรอกหมายเลข"
-                                        className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-pink-500 focus:outline-none"
-                                    />
-                                </div>
-
-                                <button
-                                    onClick={this.registerCustomer}
-                                    className="w-full py-4 bg-pink-600 text-white rounded-lg hover:bg-pink-700 font-semibold text-lg mt-6"
-                                >
-                                    เพิ่มชื่อมาใหม่
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                );
-            }
-
-            renderTracking() {
-                const { currentCustomer, procedure, currentSessionIndex, sessions, startTime, elapsedTime, note } = this.state;
-                
-                if (!procedure) {
-                    return (
-                        <div className="min-h-screen bg-gray-50 p-4">
-                            <div className="max-w-2xl mx-auto">
-                                <div className="bg-white rounded-2xl shadow-xl p-8">
-                                    <button 
-                                        onClick={() => this.setState({ view: 'dashboard' })}
-                                        className="mb-4 text-pink-600"
-                                    >
-                                        ← ย้อนกลับ
-                                    </button>
-                                    <h2 className="text-2xl font-bold mb-6">เลือกหัตถการ</h2>
-                                    <p className="text-gray-600 mb-6">
-                                        ลูกค้า: {currentCustomer.name} (HN: {currentCustomer.hn})
-                                    </p>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        {Object.keys(PROCEDURES).map(proc => (
-                                            <button
-                                                key={proc}
-                                                onClick={() => this.setState({ procedure: proc })}
-                                                className="p-4 bg-pink-100 hover:bg-pink-200 rounded-lg font-medium"
-                                            >
-                                                {proc}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    );
-                }
-
-                const currentPath = PROCEDURES[procedure];
-                const currentSession = currentPath[currentSessionIndex];
-
-                return (
-                    <div className="min-h-screen bg-gray-50 p-4">
-                        <div className="max-w-3xl mx-auto">
-                            <div className="bg-white rounded-2xl shadow-xl p-8
+</body>
+</html>
