@@ -1,92 +1,133 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-  <meta charset="UTF-8">
-  <title>Emma Clinic - Time Tracker</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+<meta charset="UTF-8" />
+<title>Emma Clinic Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<script src="https://cdn.tailwindcss.com"></script>
+
 </head>
-
-<body class="bg-gray-100 min-h-screen flex justify-center items-center">
-
-<div class="bg-white p-6 rounded-xl shadow w-full max-w-md">
-  <h1 class="text-xl font-bold text-center mb-4">Clinic Time Tracker</h1>
-
-  <input id="branch" placeholder="สาขา" class="w-full border p-2 rounded mb-2">
-  <input id="hn" placeholder="HN" class="w-full border p-2 rounded mb-2">
-  <input id="name" placeholder="ชื่อลูกค้า" class="w-full border p-2 rounded mb-2">
-  <input id="procedure" placeholder="หัตถการ" class="w-full border p-2 rounded mb-2">
-
-  <select id="session" class="w-full border p-2 rounded mb-3">
-    <option>Check-in</option>
-    <option>คลีนซิ่ง</option>
-    <option>ทำหัตถการ</option>
-    <option>Check-out</option>
-  </select>
-
-  <div class="flex gap-2 mb-3">
-    <button onclick="startSession()" class="flex-1 bg-green-500 text-white p-2 rounded">START</button>
-    <button onclick="stopSession()" class="flex-1 bg-red-500 text-white p-2 rounded">STOP</button>
-  </div>
-
-  <button onclick="submitAll()" class="w-full bg-blue-600 text-white p-2 rounded">
-    บันทึกทั้งหมด
-  </button>
-
-  <p id="status" class="text-center mt-2 text-sm"></p>
-</div>
+<body class="bg-gray-50">
 
 <script>
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyhJvSH2NcWceeqhjBv2UZ1Ycz8-mTarmW2kE7fpJeqFu1_a2XcvBKx8MXO55BLjCcQ/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbxgWQ4j4BS5k__1mMiWUhBE-gQQrznV7nEogNWkdMAGbpFRsq7NoWUUShjIy31YmZEv/exec";
 
-
-let currentStart = null;
-let sessions = [];
-
-function startSession() {
-  currentStart = new Date();
-  status.innerText = "เริ่มจับเวลาแล้ว";
-}
-
-function stopSession() {
-  if (!currentStart) return;
-
-  const end = new Date();
-  const duration = Math.round((end - currentStart) / 60000);
-
-  sessions.push({
-    session: session.value,
-    startTime: currentStart.toLocaleTimeString(),
-    duration: duration,
-    status: "completed"
-  });
-
-  currentStart = null;
-  status.innerText = "บันทึก session แล้ว";
-}
-
-function submitAll() {
-  fetch(SCRIPT_URL, {
+function post(data) {
+  return fetch(API_URL, {
     method: "POST",
-    body: JSON.stringify({
-      action: "save_sessions",
-      timestamp: new Date().toLocaleString('th-TH'),
-      branch: branch.value,
-      hn: hn.value,
-      name: name.value,
-      procedure: procedure.value,
-      sessions: sessions
-    })
-  })
-  .then(r => r.json())
-  .then(() => {
-    status.innerText = "บันทึกลงระบบเรียบร้อย";
-    sessions = [];
-  })
-  .catch(() => {
-    status.innerText = "เกิดข้อผิดพลาด";
+    body: JSON.stringify(data)
+  }).then(r => r.json());
+}
+
+function loadDashboard() {
+  post({ action: "get_customers" }).then(res => {
+    if (!res.success) return;
+
+    const customers = res.customers;
+    const waiting = customers.filter(c => c.status === "waiting");
+    const serving = customers.filter(c => c.status === "in-service");
+    const completed = customers.filter(c => c.status === "completed");
+
+    document.getElementById("w").innerText = waiting.length;
+    document.getElementById("s").innerText = serving.length;
+    document.getElementById("c").innerText = completed.length;
+
+    const list = document.getElementById("list");
+    list.innerHTML = "";
+
+    serving.forEach(c => {
+      list.innerHTML += `
+        <div class="bg-white p-4 rounded-xl flex justify-between items-center mb-2">
+          <div>
+            <div class="font-semibold">${c.name}</div>
+            <div class="text-sm text-gray-500">HN: ${c.hn}</div>
+          </div>
+          <button class="bg-red-500 text-white px-4 py-2 rounded-lg"
+            onclick="finishService('${c.hn}')">
+            จบการบริการ
+          </button>
+        </div>
+      `;
+    });
   });
 }
+
+function register() {
+  post({
+    action: "register",
+    branch: document.getElementById("branch").value,
+    hn: document.getElementById("hn").value,
+    name: document.getElementById("name").value,
+    phone: document.getElementById("phone").value
+  }).then(loadDashboard);
+}
+
+function startService(hn) {
+  post({
+    action: "update_status",
+    hn: hn,
+    status: "in-service"
+  }).then(loadDashboard);
+}
+
+function finishService(hn) {
+  post({
+    action: "update_status",
+    hn: hn,
+    status: "completed"
+  }).then(loadDashboard);
+}
+
+window.onload = loadDashboard;
 </script>
+
+<!-- Header -->
+<div class="bg-white p-4 flex justify-between items-center shadow">
+  <div class="font-bold text-lg">Emma Clinic</div>
+  <select id="branch" class="border rounded-lg px-3 py-2">
+    <option>แพรกษา</option>
+    <option>อโศก</option>
+    <option>รังสิต</option>
+  </select>
+</div>
+
+<!-- Dashboard -->
+<div class="p-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+  <div class="bg-white p-4 rounded-xl text-center">
+    <div class="text-gray-500">รอ</div>
+    <div id="w" class="text-3xl font-bold">0</div>
+  </div>
+  <div class="bg-white p-4 rounded-xl text-center">
+    <div class="text-gray-500">กำลังทำ</div>
+    <div id="s" class="text-3xl font-bold">0</div>
+  </div>
+  <div class="bg-white p-4 rounded-xl text-center">
+    <div class="text-gray-500">เสร็จแล้ว</div>
+    <div id="c" class="text-3xl font-bold">0</div>
+  </div>
+</div>
+
+<!-- Register -->
+<div class="p-6">
+  <div class="bg-white p-6 rounded-xl">
+    <div class="font-bold mb-4">ลงทะเบียนลูกค้า</div>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <input id="hn" placeholder="HN" class="border rounded-lg p-2" />
+      <input id="name" placeholder="ชื่อ" class="border rounded-lg p-2" />
+      <input id="phone" placeholder="โทร" class="border rounded-lg p-2" />
+      <button onclick="register()" class="bg-red-500 text-white rounded-lg">
+        ลงทะเบียน
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Serving List -->
+<div class="p-6">
+  <div class="font-bold mb-2">กำลังให้บริการ</div>
+  <div id="list"></div>
+</div>
 
 </body>
 </html>
