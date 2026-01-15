@@ -1,132 +1,139 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-<meta charset="UTF-8" />
-<title>Emma Clinic Dashboard</title>
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-
+<meta charset="UTF-8">
+<title>Emma Clinic</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="https://cdn.tailwindcss.com"></script>
-
 </head>
+
 <body class="bg-gray-50">
 
 <script>
-const API_URL = "https://script.google.com/macros/s/AKfycbxgWQ4j4BS5k__1mMiWUhBE-gQQrznV7nEogNWkdMAGbpFRsq7NoWUUShjIy31YmZEv/exec";
+const API = "https://script.google.com/macros/s/AKfycbxgWQ4j4BS5k__1mMiWUhBE-gQQrznV7nEogNWkdMAGbpFRsq7NoWUUShjIy31YmZEv/exec";
 
-function post(data) {
-  return fetch(API_URL, {
-    method: "POST",
-    body: JSON.stringify(data)
-  }).then(r => r.json());
+function post(data){
+  const form = new URLSearchParams();
+  Object.keys(data).forEach(k => form.append(k, data[k]));
+  return fetch(API,{method:"POST",body:form}).then(r=>r.json());
 }
 
-function loadDashboard() {
-  post({ action: "get_customers" }).then(res => {
-    if (!res.success) return;
+function toast(msg){
+  alert(msg); // เวอร์ชันง่าย เดี๋ยวค่อยอัปเป็น toast จริง
+}
 
-    const customers = res.customers;
-    const waiting = customers.filter(c => c.status === "waiting");
-    const serving = customers.filter(c => c.status === "in-service");
-    const completed = customers.filter(c => c.status === "completed");
+function load(){
+  post({action:"get_customers"}).then(res=>{
+    const w=[], s=[], d=[];
+    res.customers.forEach(c=>{
+      if(c.status==="waiting") w.push(c);
+      if(c.status==="in-service") s.push(c);
+      if(c.status==="completed") d.push(c);
+    });
 
-    document.getElementById("w").innerText = waiting.length;
-    document.getElementById("s").innerText = serving.length;
-    document.getElementById("c").innerText = completed.length;
+    wCount.innerText=w.length;
+    sCount.innerText=s.length;
+    dCount.innerText=d.length;
 
-    const list = document.getElementById("list");
-    list.innerHTML = "";
+    waiting.innerHTML="";
+    serving.innerHTML="";
 
-    serving.forEach(c => {
-      list.innerHTML += `
-        <div class="bg-white p-4 rounded-xl flex justify-between items-center mb-2">
+    w.forEach(c=>{
+      waiting.innerHTML+=`
+        <div class="bg-white p-4 rounded-xl flex justify-between">
           <div>
-            <div class="font-semibold">${c.name}</div>
-            <div class="text-sm text-gray-500">HN: ${c.hn}</div>
+            <b>${c.name}</b><div class="text-sm">HN ${c.hn}</div>
           </div>
-          <button class="bg-red-500 text-white px-4 py-2 rounded-lg"
-            onclick="finishService('${c.hn}')">
-            จบการบริการ
+          <button onclick="start('${c.hn}')" class="bg-green-500 text-white px-4 py-2 rounded-lg">
+            เริ่มให้บริการ
           </button>
-        </div>
-      `;
+        </div>`;
+    });
+
+    s.forEach(c=>{
+      serving.innerHTML+=`
+        <div class="bg-white p-4 rounded-xl flex justify-between">
+          <div>
+            <b>${c.name}</b><div class="text-sm">HN ${c.hn}</div>
+          </div>
+          <button onclick="finish('${c.hn}')" class="bg-red-500 text-white px-4 py-2 rounded-lg">
+            เสร็จสิ้น
+          </button>
+        </div>`;
     });
   });
 }
 
-function register() {
+function register(){
   post({
-    action: "register",
-    branch: document.getElementById("branch").value,
-    hn: document.getElementById("hn").value,
-    name: document.getElementById("name").value,
-    phone: document.getElementById("phone").value
-  }).then(loadDashboard);
+    action:"register",
+    branch:branch.value,
+    hn:hn.value,
+    name:name.value,
+    phone:phone.value
+  }).then(()=>{
+    toast("ลงทะเบียนเรียบร้อย");
+    modal.classList.add("hidden");
+    load();
+  });
 }
 
-function startService(hn) {
-  post({
-    action: "update_status",
-    hn: hn,
-    status: "in-service"
-  }).then(loadDashboard);
+function start(hn){
+  post({action:"update_status",hn,status:"in-service"}).then(load);
 }
 
-function finishService(hn) {
-  post({
-    action: "update_status",
-    hn: hn,
-    status: "completed"
-  }).then(loadDashboard);
+function finish(hn){
+  post({action:"update_status",hn,status:"completed"}).then(load);
 }
 
-window.onload = loadDashboard;
+window.onload=load;
 </script>
 
-<!-- Header -->
-<div class="bg-white p-4 flex justify-between items-center shadow">
-  <div class="font-bold text-lg">Emma Clinic</div>
-  <select id="branch" class="border rounded-lg px-3 py-2">
-    <option>แพรกษา</option>
-    <option>อโศก</option>
-    <option>รังสิต</option>
-  </select>
+<!-- HEADER -->
+<div class="bg-white p-4 flex justify-between shadow">
+  <b>Emma Clinic</b>
+  <button onclick="modal.classList.remove('hidden')" class="bg-red-500 text-white px-4 py-2 rounded-lg">
+    ลงทะเบียน
+  </button>
 </div>
 
-<!-- Dashboard -->
-<div class="p-6 grid grid-cols-1 md:grid-cols-4 gap-4">
-  <div class="bg-white p-4 rounded-xl text-center">
-    <div class="text-gray-500">รอ</div>
-    <div id="w" class="text-3xl font-bold">0</div>
+<!-- DASHBOARD -->
+<div class="p-6 grid grid-cols-3 gap-4">
+  <div class="bg-white p-4 rounded-xl text-center">รอ<br><b id="wCount">0</b></div>
+  <div class="bg-white p-4 rounded-xl text-center">กำลังทำ<br><b id="sCount">0</b></div>
+  <div class="bg-white p-4 rounded-xl text-center">เสร็จแล้ว<br><b id="dCount">0</b></div>
+</div>
+
+<!-- LISTS -->
+<div class="p-6 grid grid-cols-2 gap-6">
+  <div>
+    <h3 class="mb-2">รอให้บริการ</h3>
+    <div id="waiting" class="space-y-2"></div>
   </div>
-  <div class="bg-white p-4 rounded-xl text-center">
-    <div class="text-gray-500">กำลังทำ</div>
-    <div id="s" class="text-3xl font-bold">0</div>
-  </div>
-  <div class="bg-white p-4 rounded-xl text-center">
-    <div class="text-gray-500">เสร็จแล้ว</div>
-    <div id="c" class="text-3xl font-bold">0</div>
+  <div>
+    <h3 class="mb-2">กำลังให้บริการ</h3>
+    <div id="serving" class="space-y-2"></div>
   </div>
 </div>
 
-<!-- Register -->
-<div class="p-6">
-  <div class="bg-white p-6 rounded-xl">
-    <div class="font-bold mb-4">ลงทะเบียนลูกค้า</div>
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-      <input id="hn" placeholder="HN" class="border rounded-lg p-2" />
-      <input id="name" placeholder="ชื่อ" class="border rounded-lg p-2" />
-      <input id="phone" placeholder="โทร" class="border rounded-lg p-2" />
-      <button onclick="register()" class="bg-red-500 text-white rounded-lg">
-        ลงทะเบียน
+<!-- MODAL -->
+<div id="modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center">
+  <div class="bg-white p-6 rounded-xl w-96 space-y-3">
+    <h3 class="font-bold">ลงทะเบียนลูกค้า</h3>
+    <select id="branch" class="border p-2 w-full rounded">
+      <option>แพรกษา</option>
+      <option>อโศก</option>
+    </select>
+    <input id="hn" placeholder="HN" class="border p-2 w-full rounded">
+    <input id="name" placeholder="ชื่อ" class="border p-2 w-full rounded">
+    <input id="phone" placeholder="โทร" class="border p-2 w-full rounded">
+    <div class="flex justify-end gap-2">
+      <button onclick="modal.classList.add('hidden')">ยกเลิก</button>
+      <button onclick="register()" class="bg-red-500 text-white px-4 py-2 rounded">
+        บันทึก
       </button>
     </div>
   </div>
-</div>
-
-<!-- Serving List -->
-<div class="p-6">
-  <div class="font-bold mb-2">กำลังให้บริการ</div>
-  <div id="list"></div>
 </div>
 
 </body>
