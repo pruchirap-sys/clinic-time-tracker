@@ -1,141 +1,1158 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-<meta charset="UTF-8">
-<title>Emma Clinic</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<script src="https://cdn.tailwindcss.com"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emma Clinic - Time Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Sarabun', 'Noto Sans Thai', sans-serif; }
+    </style>
 </head>
-
 <body class="bg-gray-50">
+    <div id="app"></div>
 
-<script>
-const API = "https://script.google.com/macros/s/AKfycbyKL690Bip2KdlXsgXbT0OqNbcX0AWVOoV4uBubnSVqYnDSDeFNO1xBX0WGaeWdHUeI/exec";
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        
+        const GOOGLE_SCRIPT_URL = 'YOUR_GOOGLE_APPS_SCRIPT_URL_HERE';
+        
+        const BRANCHES = [
+            { code: '001', name: 'แพรกษา' }, { code: '002', name: 'อโศก' },
+            { code: '003', name: 'พระราม2' }, { code: '004', name: 'ลาดพร้าว' },
+            { code: '005', name: 'รังสิต' }, { code: '006', name: 'ชลบุรี' },
+            { code: '007', name: 'พิษณุโลก' }, { code: '008', name: 'ขอนแก่น' },
+            { code: '009', name: 'พระราม9' }, { code: '010', name: 'โคราช' },
+            { code: '011', name: 'ภูเก็ต' }
+        ];
 
-function post(data){
-  const form = new URLSearchParams();
-  Object.keys(data).forEach(k => form.append(k, data[k]));
-  return fetch(API,{method:"POST",body:form}).then(r=>r.json());
-}
+        const PROCEDURES = {
+            'Botox': ['Check-in', 'คลีนซิ่ง', 'เตรียมผิว', 'ฉีด Botox', 'พักฟื้น', 'Check-out'],
+            'Filler': ['Check-in', 'คลีนซิ่ง', 'ทา Numbing', 'พักรอ Numbing', 'ฉีด Filler', 'พักฟื้น', 'Check-out'],
+            'Laser': ['Check-in', 'คลีนซิ่ง', 'เตรียมผิว', 'ยิงเลเซอร์', 'Cooling', 'Check-out'],
+            'Thread Lift': ['Check-in', 'คลีนซิ่ง', 'Design', 'ทา Numbing', 'พักรอ Numbing', 'ยกกระชับ', 'พักฟื้น', 'Check-out'],
+            'HIFU': ['Check-in', 'คลีนซิ่ง', 'Marking', 'ทำ HIFU', 'Cooling', 'Check-out'],
+            'Meso Fat': ['Check-in', 'คลีนซิ่ง', 'ทา Numbing', 'พักรอ Numbing', 'ฉีด Meso', 'พักฟื้น', 'Check-out'],
+            'IV Drip': ['Check-in', 'เจาะเลือด', 'ห้องพักผ่อน', 'เสร็จสิ้น', 'Check-out'],
+        };
 
-function toast(msg){
-  alert(msg); // เวอร์ชันง่าย เดี๋ยวค่อยอัปเป็น toast จริง
-}
+        const INITIAL_USERS = [
+            { id: 1, username: 'admin', password: 'admin123', name: 'Admin', role: 'admin', status: 'active', allowedBranches: BRANCHES.map(b => b.code) },
+            { id: 2, username: '10401', password: '268032', name: 'Ruchira', role: 'admin', status: 'active', allowedBranches: BRANCHES.map(b => b.code) },
+            { id: 3, username: 'staff001', password: 'staff123', name: 'พนักงานสาขาแพรกษา', role: 'staff', status: 'active', allowedBranches: ['001'] }
+        ];
 
-function load(){
-  post({action:"get_customers"}).then(res=>{
-    const w=[], s=[], d=[];
-    res.customers.forEach(c=>{
-      if(c.status==="waiting") w.push(c);
-      if(c.status==="in-service") s.push(c);
-      if(c.status==="completed") d.push(c);
-    });
+        function App() {
+            const [isLoggedIn, setIsLoggedIn] = useState(() => {
+                const saved = localStorage.getItem('isLoggedIn');
+                return saved === 'true';
+            });
+            const [currentUser, setCurrentUser] = useState(() => {
+                const saved = localStorage.getItem('currentUser');
+                return saved ? JSON.parse(saved) : null;
+            });
+            const [users, setUsers] = useState(() => {
+                const saved = localStorage.getItem('users');
+                return saved ? JSON.parse(saved) : INITIAL_USERS;
+            });
+            
+            const [loginUsername, setLoginUsername] = useState('');
+            const [loginPassword, setLoginPassword] = useState('');
+            const [loginError, setLoginError] = useState('');
+            
+            const [showUserMenu, setShowUserMenu] = useState(false);
+            const [showUserModal, setShowUserModal] = useState(false);
+            const [showAddForm, setShowAddForm] = useState(false);
+            const [editingUser, setEditingUser] = useState(null);
+            
+            const [view, setView] = useState('dashboard');
+            const [selectedBranch, setSelectedBranch] = useState('001');
+            const [filterStatus, setFilterStatus] = useState('all');
+            const [selectedDate, setSelectedDate] = useState(() => {
+                const today = new Date();
+                return today.toISOString().split('T')[0];
+            });
+            const [historyDate, setHistoryDate] = useState(new Date().toISOString().split('T')[0]);
 
-    wCount.innerText=w.length;
-    sCount.innerText=s.length;
-    dCount.innerText=d.length;
+            const [customers, setCustomers] = useState(() => {
+                const saved = localStorage.getItem('customers');
+                return saved ? JSON.parse(saved) : [
+                    { hn: '0010000675', name: 'รุจิรา', phone: '0812345678', status: 'waiting', branch: '001', timestamp: '09:56', registeredAt: new Date().getTime(), sessions: [] }
+                ];
+            });
+            
+            const [regHN, setRegHN] = useState('');
+            const [regName, setRegName] = useState('');
+            const [regPhone, setRegPhone] = useState('');
+            
+            const [currentCustomer, setCurrentCustomer] = useState(null);
+            const [procedure, setProcedure] = useState('');
+            const [currentSessionIndex, setCurrentSessionIndex] = useState(0);
+            const [sessions, setSessions] = useState([]);
+            const [startTime, setStartTime] = useState(null);
+            const [elapsedTime, setElapsedTime] = useState(0);
+            const [note, setNote] = useState('');
+            const [showAccidentModal, setShowAccidentModal] = useState(false);
+            const [accidentNote, setAccidentNote] = useState('');
+            const [showSuccessModal, setShowSuccessModal] = useState(false);
+            const [showDeleteModal, setShowDeleteModal] = useState(false);
+            const [deleteNote, setDeleteNote] = useState('');
+            const [customerToDelete, setCustomerToDelete] = useState(null);
+            const [deletedCustomers, setDeletedCustomers] = useState(() => {
+                const saved = localStorage.getItem('deletedCustomers');
+                return saved ? JSON.parse(saved) : [];
+            });
+            const [expandedDeletedCustomer, setExpandedDeletedCustomer] = useState(null);
+            const [deletedFilterDate, setDeletedFilterDate] = useState('');
 
-    waiting.innerHTML="";
-    serving.innerHTML="";
+            const [newUsername, setNewUsername] = useState('');
+            const [newPassword, setNewPassword] = useState('');
+            const [newName, setNewName] = useState('');
+            const [newRole, setNewRole] = useState('staff');
+            const [newAllowedBranches, setNewAllowedBranches] = useState([]);
+            const [expandedCustomer, setExpandedCustomer] = useState(null);
 
-    w.forEach(c=>{
-      waiting.innerHTML+=`
-        <div class="bg-white p-4 rounded-xl flex justify-between">
-          <div>
-            <b>${c.name}</b><div class="text-sm">HN ${c.hn}</div>
-          </div>
-          <button onclick="start('${c.hn}')" class="bg-green-500 text-white px-4 py-2 rounded-lg">
-            เริ่มให้บริการ
-          </button>
-        </div>`;
-    });
+            useEffect(() => {
+                let timerInterval;
+                if (startTime) {
+                    timerInterval = setInterval(() => {
+                        setElapsedTime(Math.floor((Date.now() - startTime) / 1000));
+                    }, 1000);
+                }
+                return () => { if (timerInterval) clearInterval(timerInterval); };
+            }, [startTime]);
 
-    s.forEach(c=>{
-      serving.innerHTML+=`
-        <div class="bg-white p-4 rounded-xl flex justify-between">
-          <div>
-            <b>${c.name}</b><div class="text-sm">HN ${c.hn}</div>
-          </div>
-          <button onclick="finish('${c.hn}')" class="bg-red-500 text-white px-4 py-2 rounded-lg">
-            เสร็จสิ้น
-          </button>
-        </div>`;
-    });
-  });
-}
+            useEffect(() => {
+                if (currentUser && !currentUser.allowedBranches.includes(selectedBranch)) {
+                    setSelectedBranch(currentUser.allowedBranches[0]);
+                }
+            }, [currentUser, selectedBranch]);
 
-function register(){
-  post({
-    action:"register",
-    branch:branch.value,
-    hn:hn.value,
-    name:name.value,
-    phone:phone.value
-  }).then(()=>{
-    toast("ลงทะเบียนเรียบร้อย");
-    modal.classList.add("hidden");
-    load();
-  });
-}
+            const handleLogin = () => {
+                const user = users.find(u => u.username === loginUsername && u.password === loginPassword);
+                if (user) {
+                    if (user.status === 'suspended') { setLoginError('บัญชีนี้ถูกระงับการใช้งาน'); return; }
+                    
+                    setCurrentUser(user);
+                    setIsLoggedIn(true);
+                    setSelectedBranch(user.allowedBranches[0]);
+                    
+                    localStorage.setItem('isLoggedIn', 'true');
+                    localStorage.setItem('currentUser', JSON.stringify(user));
+                    
+                    setLoginError(''); 
+                    setLoginUsername(''); 
+                    setLoginPassword('');
+                } else { setLoginError('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง'); }
+            };
 
-function start(hn){
-  post({action:"update_status",hn,status:"in-service"}).then(load);
-}
+            const handleLogout = () => {
+                setIsLoggedIn(false); 
+                setCurrentUser(null); 
+                setShowUserMenu(false); 
+                setView('dashboard');
+                
+                localStorage.removeItem('isLoggedIn');
+                localStorage.removeItem('currentUser');
+            };
 
-function finish(hn){
-  post({action:"update_status",hn,status:"completed"}).then(load);
-}
+            const handleAddUser = () => {
+                if (!newUsername || !newPassword || !newName || newAllowedBranches.length === 0) {
+                    alert('กรุณากรอกข้อมูลให้ครบถ้วน'); return;
+                }
+                const newUser = {
+                    id: Date.now(),
+                    username: newUsername, password: newPassword, name: newName,
+                    role: newRole, status: 'active', allowedBranches: newAllowedBranches
+                };
+                const updatedUsers = [...users, newUser];
+                setUsers(updatedUsers);
+                localStorage.setItem('users', JSON.stringify(updatedUsers));
+                resetUserForm();
+            };
 
-window.onload=load;
-</script>
+            const handleEditClick = (user) => {
+                setEditingUser(user);
+                setNewName(user.name); setNewUsername(user.username);
+                setNewPassword(user.password); setNewRole(user.role);
+                setNewAllowedBranches(user.allowedBranches);
+                setShowAddForm(true);
+            };
 
-<!-- HEADER -->
-<div class="bg-white p-4 flex justify-between shadow">
-  <b>Emma Clinic</b>
-  <button onclick="modal.classList.remove('hidden')" class="bg-red-500 text-white px-4 py-2 rounded-lg">
-    ลงทะเบียน
-  </button>
-</div>
+            const handleUpdateUser = () => {
+                const updatedUsers = users.map(u => u.id === editingUser.id ? { ...u, name: newName, username: newUsername, password: newPassword, role: newRole, allowedBranches: newAllowedBranches } : u);
+                setUsers(updatedUsers);
+                localStorage.setItem('users', JSON.stringify(updatedUsers));
+                
+                if (editingUser.id === currentUser.id) {
+                    const updatedCurrentUser = { ...currentUser, name: newName, username: newUsername, password: newPassword, role: newRole, allowedBranches: newAllowedBranches };
+                    setCurrentUser(updatedCurrentUser);
+                    localStorage.setItem('currentUser', JSON.stringify(updatedCurrentUser));
+                }
+                
+                resetUserForm();
+            };
 
-<!-- DASHBOARD -->
-<div class="p-6 grid grid-cols-3 gap-4">
-  <div class="bg-white p-4 rounded-xl text-center">รอ<br><b id="wCount">0</b></div>
-  <div class="bg-white p-4 rounded-xl text-center">กำลังทำ<br><b id="sCount">0</b></div>
-  <div class="bg-white p-4 rounded-xl text-center">เสร็จแล้ว<br><b id="dCount">0</b></div>
-</div>
+            const toggleUserStatus = (id) => {
+                if (id === 1) return alert('ไม่สามารถระงับ Admin ได้');
+                const updatedUsers = users.map(u => u.id === id ? { ...u, status: u.status === 'active' ? 'suspended' : 'active' } : u);
+                setUsers(updatedUsers);
+                localStorage.setItem('users', JSON.stringify(updatedUsers));
+            };
 
-<!-- LISTS -->
-<div class="p-6 grid grid-cols-2 gap-6">
-  <div>
-    <h3 class="mb-2">รอให้บริการ</h3>
-    <div id="waiting" class="space-y-2"></div>
-  </div>
-  <div>
-    <h3 class="mb-2">กำลังให้บริการ</h3>
-    <div id="serving" class="space-y-2"></div>
-  </div>
-</div>
+            const deleteUser = (id) => {
+                if (id === 1) return alert('ไม่สามารถลบ Admin ได้');
+                if (confirm('ยืนยันการลบผู้ใช้?')) {
+                    const updatedUsers = users.filter(u => u.id !== id);
+                    setUsers(updatedUsers);
+                    localStorage.setItem('users', JSON.stringify(updatedUsers));
+                }
+            };
 
-<!-- MODAL -->
-<div id="modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center">
-  <div class="bg-white p-6 rounded-xl w-96 space-y-3">
-    <h3 class="font-bold">ลงทะเบียนลูกค้า</h3>
-    <select id="branch" class="border p-2 w-full rounded">
-      <option>แพรกษา</option>
-      <option>อโศก</option>
-    </select>
-    <input id="hn" placeholder="HN" class="border p-2 w-full rounded">
-    <input id="name" placeholder="ชื่อ" class="border p-2 w-full rounded">
-    <input id="phone" placeholder="โทร" class="border p-2 w-full rounded">
-    <div class="flex justify-end gap-2">
-      <button onclick="modal.classList.add('hidden')">ยกเลิก</button>
-      <button onclick="register()" class="bg-red-500 text-white px-4 py-2 rounded">
-        บันทึก
-      </button>
-    </div>
-  </div>
-</div>
+            const resetUserForm = () => {
+                setNewUsername(''); setNewPassword(''); setNewName('');
+                setNewRole('staff'); setNewAllowedBranches([]);
+                setEditingUser(null); setShowAddForm(false);
+            };
 
+            const toggleBranch = (branchCode) => {
+                setNewAllowedBranches(prev => prev.includes(branchCode) ? prev.filter(b => b !== branchCode) : [...prev, branchCode]);
+            };
+
+            const getTodayString = () => {
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const day = String(now.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            };
+
+            const isSameDate = (timestamp, dateStr) => {
+                const date = new Date(timestamp);
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                const dateOnlyStr = `${year}-${month}-${day}`;
+                
+                console.log('isSameDate check:', {
+                    timestamp,
+                    dateStr,
+                    dateOnlyStr,
+                    match: dateOnlyStr === dateStr
+                });
+                
+                return dateOnlyStr === dateStr;
+            };
+
+            const getStats = () => {
+                const today = getTodayString();
+                const branchCustomers = customers.filter(c => {
+                    const matchBranch = c.branch === selectedBranch;
+                    const matchDate = isSameDate(c.registeredAt, today);
+                    return matchBranch && matchDate;
+                });
+                
+                console.log('Stats - Total customers:', customers.length);
+                console.log('Stats - Branch customers:', branchCustomers.length);
+                console.log('Stats - Selected branch:', selectedBranch);
+                console.log('Stats - Today date:', today);
+                
+                return {
+                    registered: branchCustomers.length,
+                    waiting: branchCustomers.filter(c => c.status === 'waiting').length,
+                    inService: branchCustomers.filter(c => c.status === 'in-service').length,
+                    completed: branchCustomers.filter(c => c.status === 'completed').length,
+                    accident: branchCustomers.filter(c => c.sessions?.some(s => s.status === 'accident')).length
+                };
+            };
+            const stats = getStats();
+
+            const registerCustomer = () => {
+                if (!regHN || !regName || !regPhone) { alert('กรุณากรอกข้อมูลให้ครบถ้วน'); return; }
+                
+                const now = new Date();
+                const todayStr = getTodayString();
+                
+                const newCustomer = {
+                    hn: regHN, 
+                    name: regName, 
+                    phone: regPhone, 
+                    status: 'waiting', 
+                    branch: selectedBranch,
+                    timestamp: now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+                    registeredAt: now.getTime(),
+                    registeredDate: todayStr,
+                    sessions: []
+                };
+                
+                const updatedCustomers = [...customers, newCustomer];
+                setCustomers(updatedCustomers);
+                localStorage.setItem('customers', JSON.stringify(updatedCustomers));
+                
+                console.log('=== NEW REGISTRATION ===');
+                console.log('New customer:', newCustomer);
+                console.log('Today string (getTodayString):', todayStr);
+                console.log('registeredAt timestamp:', newCustomer.registeredAt);
+                console.log('registeredAt as Date:', new Date(newCustomer.registeredAt));
+                console.log('All customers after add:', updatedCustomers);
+                
+                setRegHN(''); 
+                setRegName(''); 
+                setRegPhone('');
+                setShowSuccessModal(true);
+                
+                setTimeout(() => {
+                    setShowSuccessModal(false);
+                    setView('dashboard');
+                }, 2000);
+            };
+
+            const startTracking = (customer) => { setView('selectProcedure'); setCurrentCustomer(customer); };
+
+            const selectProcedure = (proc) => {
+                const updatedCustomers = customers.map(c => c.hn === currentCustomer.hn ? {...c, status: 'in-service'} : c);
+                setCustomers(updatedCustomers);
+                localStorage.setItem('customers', JSON.stringify(updatedCustomers));
+                setProcedure(proc); setView('tracking'); setCurrentSessionIndex(0); setSessions([]);
+                setStartTime(null); setElapsedTime(0);
+            };
+
+            const formatTime = (seconds) => {
+                const mins = Math.floor(seconds / 60); const secs = seconds % 60;
+                return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            };
+
+            const startSession = () => { setStartTime(Date.now()); setElapsedTime(0); };
+
+            const stopSession = () => {
+                const currentPath = PROCEDURES[procedure];
+                const newSession = {
+                    session: currentPath[currentSessionIndex], startTime: new Date(startTime).toLocaleTimeString('th-TH'),
+                    duration: formatTime(elapsedTime), note: note, status: 'completed'
+                };
+                const newSessions = [...sessions, newSession];
+                if (currentSessionIndex < currentPath.length - 1) {
+                    setSessions(newSessions); setCurrentSessionIndex(currentSessionIndex + 1); setStartTime(null); setElapsedTime(0); setNote('');
+                } else {
+                    const updatedCustomers = customers.map(c => c.hn === currentCustomer.hn ? {...c, status: 'completed', sessions: newSessions} : c);
+                    setCustomers(updatedCustomers);
+                    localStorage.setItem('customers', JSON.stringify(updatedCustomers));
+                    setStartTime(null); setElapsedTime(0); setNote('');
+                    setTimeout(() => { alert('บันทึกสำเร็จ!'); setView('dashboard'); resetTracking(); }, 100);
+                }
+            };
+
+            const handleAccident = () => {
+                if (!accidentNote.trim()) { 
+                    alert('กรุณาระบุหมายเหตุ'); 
+                    return; 
+                }
+
+                const newAccidentEntry = {
+                    session: PROCEDURES[procedure][currentSessionIndex], 
+                    startTime: new Date(startTime).toLocaleTimeString('th-TH'),
+                    duration: formatTime(elapsedTime), 
+                    note: `⚠️ ACCIDENT: ${accidentNote}`, 
+                    status: 'accident'
+                };
+
+                const updatedSessions = [...sessions, newAccidentEntry];
+                const updatedCustomers = customers.map(c => 
+                    c.hn === currentCustomer.hn 
+                        ? { ...c, status: 'completed', sessions: updatedSessions } 
+                        : c
+                );
+
+                setCustomers(updatedCustomers);
+                localStorage.setItem('customers', JSON.stringify(updatedCustomers));
+
+                setShowAccidentModal(false);
+                setAccidentNote('');
+                setStartTime(null);
+                setElapsedTime(0);
+                
+                setTimeout(() => { 
+                    alert('บันทึก Accident สำเร็จ!'); 
+                    setView('dashboard'); 
+                    resetTracking(); 
+                }, 100);
+            };
+
+            const deleteCustomer = (customer) => {
+                setCustomerToDelete(customer);
+                setShowDeleteModal(true);
+            };
+
+            const confirmDelete = () => {
+                if (!deleteNote.trim()) {
+                    alert('กรุณาระบุหมายเหตุการลบ');
+                    return;
+                }
+
+                const deletedRecord = {
+                    ...customerToDelete,
+                    deletedAt: new Date().getTime(),
+                    deletedDate: getTodayString(),
+                    deleteNote: deleteNote,
+                    deletedBy: currentUser.name
+                };
+
+                const updatedCustomers = customers.filter(c => c.hn !== customerToDelete.hn);
+                const updatedDeletedCustomers = [...deletedCustomers, deletedRecord];
+
+                setCustomers(updatedCustomers);
+                setDeletedCustomers(updatedDeletedCustomers);
+                localStorage.setItem('customers', JSON.stringify(updatedCustomers));
+                localStorage.setItem('deletedCustomers', JSON.stringify(updatedDeletedCustomers));
+
+                setShowDeleteModal(false);
+                setDeleteNote('');
+                setCustomerToDelete(null);
+                setExpandedCustomer(null);
+            };
+
+            const restoreCustomer = (deletedCustomer) => {
+                if (confirm('ยืนยันการกู้คืนข้อมูลลูกค้า?')) {
+                    const { deletedAt, deletedDate, deleteNote, deletedBy, ...originalCustomer } = deletedCustomer;
+                    
+                    const updatedCustomers = [...customers, originalCustomer];
+                    const updatedDeletedCustomers = deletedCustomers.filter(c => c.hn !== deletedCustomer.hn);
+
+                    setCustomers(updatedCustomers);
+                    setDeletedCustomers(updatedDeletedCustomers);
+                    localStorage.setItem('customers', JSON.stringify(updatedCustomers));
+                    localStorage.setItem('deletedCustomers', JSON.stringify(updatedDeletedCustomers));
+
+                    alert('กู้คืนข้อมูลสำเร็จ!');
+                }
+            };
+
+            const toggleCustomerDetails = (hn) => {
+                if (expandedCustomer === hn) {
+                    setExpandedCustomer(null);
+                } else {
+                    setExpandedCustomer(hn);
+                }
+            };
+
+            const toggleDeletedCustomerDetails = (hn) => {
+                if (expandedDeletedCustomer === hn) {
+                    setExpandedDeletedCustomer(null);
+                } else {
+                    setExpandedDeletedCustomer(hn);
+                }
+            };
+
+            const resetTracking = () => { setProcedure(''); setCurrentCustomer(null); setSessions([]); setCurrentSessionIndex(0); };
+            const backToDashboard = () => { setView('dashboard'); };
+            
+            const getFilteredCustomers = () => {
+                const today = getTodayString();
+                let filtered = customers.filter(c => {
+                    const matchBranch = c.branch === selectedBranch;
+                    const matchDate = isSameDate(c.registeredAt, today);
+                    console.log('Filter check:', {
+                        customer: c.name,
+                        branch: c.branch,
+                        selectedBranch,
+                        matchBranch,
+                        registeredAt: new Date(c.registeredAt).toDateString(),
+                        today: new Date(today + 'T00:00:00').toDateString(),
+                        matchDate
+                    });
+                    return matchBranch && matchDate;
+                });
+                
+                if (filterStatus === 'accident') {
+                    filtered = filtered.filter(c => c.sessions?.some(s => s.status === 'accident'));
+                } else if (filterStatus !== 'all') {
+                    filtered = filtered.filter(c => c.status === filterStatus);
+                }
+                
+                console.log('Filtered customers:', filtered);
+                return filtered;
+            };
+
+            const getStatusColor = (status) => {
+                switch(status) {
+                    case 'waiting': return 'border-yellow-500 bg-yellow-50';
+                    case 'in-service': return 'border-red-500 bg-red-50';
+                    case 'completed': return 'border-green-500 bg-green-50';
+                    default: return 'border-gray-500 bg-gray-50';
+                }
+            };
+
+            const getStatusBadge = (status) => {
+                switch(status) {
+                    case 'waiting': return <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-lg text-sm font-medium">รอคิว</span>;
+                    case 'in-service': return <span className="px-3 py-1 bg-red-100 text-red-700 rounded-lg text-sm font-medium">กำลังรับบริการ</span>;
+                    case 'completed': return <span className="px-3 py-1 bg-green-100 text-green-700 rounded-lg text-sm font-medium">เสร็จสิ้น</span>;
+                    default: return null;
+                }
+            };
+
+            if (!isLoggedIn) {
+                return (
+                    <div className="min-h-screen bg-gradient-to-br from-pink-100 to-pink-200 flex items-center justify-center">
+                        <div className="bg-white rounded-3xl shadow-2xl p-12 w-full max-w-md">
+                            <div className="text-center mb-8">
+                                <div className="w-24 h-24 bg-gradient-to-br from-pink-400 to-pink-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                                    <span className="text-white font-bold text-4xl">E</span>
+                                </div>
+                                <h1 className="text-3xl font-bold text-gray-900 mb-2">Emma Clinic</h1>
+                                <p className="text-gray-600">Time Tracker</p>
+                            </div>
+                            <div className="space-y-5">
+                                <div><label className="block text-sm font-semibold text-gray-700 mb-2">Username</label>
+                                <input type="text" value={loginUsername} onChange={(e) => setLoginUsername(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleLogin()} placeholder="กรอกชื่อผู้ใช้" className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-pink-500 focus:outline-none text-lg" /></div>
+                                <div><label className="block text-sm font-semibold text-gray-700 mb-2">Password</label>
+                                <input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleLogin()} placeholder="กรอกรหัสผ่าน" className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-pink-500 focus:outline-none text-lg" /></div>
+                                {loginError && <div className="bg-red-50 border border-red-300 text-red-700 px-4 py-3 rounded-xl text-sm">{loginError}</div>}
+                                <button onClick={handleLogin} className="w-full py-4 bg-gradient-to-r from-pink-500 to-pink-600 text-white rounded-xl hover:from-pink-600 hover:to-pink-700 font-bold text-lg shadow-lg">เข้าสู่ระบบ</button>
+                                <div className="text-center text-sm text-gray-500 mt-6">
+                                  
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (view === 'dashboard') {
+                const filteredCustomers = getFilteredCustomers();
+                const branchName = BRANCHES.find(b => b.code === selectedBranch)?.name || 'แพรกษา';
+                const allowedBranches = BRANCHES.filter(b => currentUser.allowedBranches.includes(b.code));
+                const today = getTodayString();
+
+                console.log('=== DASHBOARD RENDER ===');
+                console.log('Total customers in state:', customers.length);
+                console.log('Filtered customers:', filteredCustomers.length);
+                console.log('Selected branch:', selectedBranch, branchName);
+                console.log('Today date (using):', today);
+                console.log('Filter status:', filterStatus);
+                console.log('All customers:', customers);
+
+                return (
+                    <div className="min-h-screen bg-gray-50">
+                        <div className="bg-white border-b shadow-sm">
+                            <div className="max-w-7xl mx-auto px-6 py-4">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-14 h-14 bg-gradient-to-br from-pink-400 to-pink-600 rounded-full flex items-center justify-center shadow-md">
+                                            <span className="text-white font-bold text-xl">E</span>
+                                        </div>
+                                        <div>
+                                            <h1 className="text-2xl font-bold text-gray-900">Emma Clinic</h1>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-4">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-sm text-gray-600 font-semibold">สาขา:</span>
+                                            <select value={selectedBranch} onChange={(e) => setSelectedBranch(e.target.value)} className="text-sm border-2 border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-red-500 font-medium">
+                                                {allowedBranches.map(branch => (<option key={branch.code} value={branch.code}>{branch.name}</option>))}
+                                            </select>
+                                        </div>
+                                        <button onClick={() => setView('register')} className="px-6 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 font-medium shadow-md">+ ลงทะเบียน</button>
+                                        <div className="relative">
+                                            <button onClick={() => setShowUserMenu(!showUserMenu)} className="w-10 h-10 bg-red-500 rounded-full flex items-center justify-center text-white cursor-pointer hover:bg-red-600">{currentUser.name.charAt(0).toUpperCase()}</button>
+                                            {showUserMenu && (
+                                                <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-xl border border-gray-200 py-2 z-50">
+                                                    <div className="px-4 py-3 border-b border-gray-100"><p className="font-semibold text-gray-900">{currentUser.name}</p><p className="text-sm text-gray-600">@{currentUser.username}</p></div>
+                                                    <button onClick={() => { setView('history'); setShowUserMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-2 text-gray-700"><span>📜</span> ประวัติการเข้าใช้บริการ</button>
+                                                    {currentUser.role === 'admin' && (
+                                                        <>
+                                                            <button onClick={() => { setView('deleted'); setShowUserMenu(false); }} className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-2 text-gray-700"><span>🗑️</span> ข้อมูลที่ถูกลบ</button>
+                                                            <button onClick={() => { setShowUserMenu(false); setShowUserModal(true); }} className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-2 text-gray-700"><span>👥</span> พนักงาน</button>
+                                                        </>
+                                                    )}
+                                                    <button onClick={handleLogout} className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-2 text-red-600 border-t"><span>🚪</span> ออกจากระบบ</button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="max-w-7xl mx-auto px-6 py-6">
+                            <div className="mb-6">
+                                <h2 className="text-2xl font-bold text-gray-900">แดชบอร์ด <span className="text-orange-500">{branchName}</span></h2>
+                                <p className="text-sm text-gray-600 mt-1">
+                                    วันที่: {new Date().toLocaleDateString('th-TH', { 
+                                        weekday: 'long',
+                                        year: 'numeric', 
+                                        month: 'long', 
+                                        day: 'numeric' 
+                                    })}
+                                </p>
+                            </div>
+                            <div className="grid grid-cols-5 gap-4 mb-8">
+                                <button onClick={() => setFilterStatus('all')} className={`bg-white rounded-xl p-5 shadow-sm border transition-all ${filterStatus === 'all' ? 'border-pink-300 ring-2 ring-pink-200' : 'border-gray-100 hover:shadow-md'}`}><div className="flex items-center gap-3"><div className="w-12 h-12 bg-pink-100 rounded-lg flex items-center justify-center"><span className="text-2xl">👥</span></div><div className="text-left"><div className="text-3xl font-bold text-gray-900">{stats.registered}</div><div className="text-sm text-gray-600 mt-1">ลงทะเบียนใหม่</div></div></div></button>
+                                <button onClick={() => setFilterStatus('waiting')} className={`bg-white rounded-xl p-5 shadow-sm border transition-all ${filterStatus === 'waiting' ? 'border-yellow-300 ring-2 ring-yellow-200' : 'border-gray-100 hover:shadow-md'}`}><div className="flex items-center gap-3"><div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center"><span className="text-2xl">⏳</span></div><div className="text-left"><div className="text-3xl font-bold text-gray-900">{stats.waiting}</div><div className="text-sm text-gray-600 mt-1">รอคิวคลีนิก</div></div></div></button>
+                                <button onClick={() => setFilterStatus('in-service')} className={`bg-white rounded-xl p-5 shadow-sm border transition-all ${filterStatus === 'in-service' ? 'border-orange-300 ring-2 ring-orange-200' : 'border-gray-100 hover:shadow-md'}`}><div className="flex items-center gap-3"><div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center"><span className="text-2xl">📋</span></div><div className="text-left"><div className="text-3xl font-bold text-gray-900">{stats.inService}</div><div className="text-sm text-gray-600 mt-1">กำลังรับบริการ</div></div></div></button>
+                                <button onClick={() => setFilterStatus('completed')} className={`bg-white rounded-xl p-5 shadow-sm border transition-all ${filterStatus === 'completed' ? 'border-green-300 ring-2 ring-green-200' : 'border-gray-100 hover:shadow-md'}`}><div className="flex items-center gap-3"><div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center"><span className="text-2xl">✓</span></div><div className="text-left"><div className="text-3xl font-bold text-gray-900">{stats.completed}</div><div className="text-sm text-gray-600 mt-1">เสร็จสิ้นแล้ว</div></div></div></button>
+                                <button onClick={() => setFilterStatus('accident')} className={`bg-white rounded-xl p-5 shadow-sm border transition-all ${filterStatus === 'accident' ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-100 hover:shadow-md'}`}><div className="flex items-center gap-3"><div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center"><span className="text-2xl">⚠️</span></div><div className="text-left"><div className="text-3xl font-bold text-red-600">{stats.accident}</div><div className="text-sm text-red-600 font-bold uppercase">Accident</div></div></div></button>
+                            </div>
+
+                            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                                <div className="flex items-center justify-between mb-6">
+                                    <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">🩺 รายชื่อลูกค้าประจำวัน <span className="ml-2 px-3 py-1 bg-red-100 text-red-600 rounded-full text-sm font-semibold">{filteredCustomers.length}</span>
+                                        {filterStatus !== 'all' && (<button onClick={() => setFilterStatus('all')} className="ml-2 text-sm px-3 py-1 bg-gray-200 text-gray-700 rounded-full hover:bg-gray-300">✕ แสดงทั้งหมด</button>)}
+                                    </h3>
+                                </div>
+                                <div className="space-y-3">
+                                    {filteredCustomers.length === 0 ? (
+                                        <div className="text-center py-12 text-gray-400">
+                                            <div className="text-6xl mb-4">📋</div>
+                                            <p className="text-lg">ไม่มีข้อมูลในหมวดหมู่นี้</p>
+                                        </div>
+                                    ) : 
+                                        filteredCustomers.map((customer, idx) => (
+                                            <div key={idx}>
+                                                <div className={`flex items-center justify-between p-4 border-l-4 rounded-lg hover:shadow-md transition-shadow ${getStatusColor(customer.status)} ${expandedCustomer === customer.hn ? 'rounded-b-none' : ''}`}>
+                                                    <div className="flex items-center gap-4">
+                                                        {currentUser.role === 'admin' && (
+                                                            <button 
+                                                                onClick={() => toggleCustomerDetails(customer.hn)}
+                                                                className="text-gray-600 hover:text-gray-900 transition-transform"
+                                                            >
+                                                                <span className={`text-xl transition-transform inline-block ${expandedCustomer === customer.hn ? 'rotate-90' : ''}`}>▶</span>
+                                                            </button>
+                                                        )}
+                                                        <div className={`w-12 h-12 ${customer.status === 'waiting' ? 'bg-yellow-100' : customer.status === 'in-service' ? 'bg-red-100' : 'bg-green-100'} rounded-full flex items-center justify-center`}>
+                                                            <span className="text-xl">👤</span>
+                                                        </div>
+                                                        <div>
+                                                            <div className="font-bold text-gray-900 text-lg">
+                                                                {customer.name} 
+                                                                {customer.sessions?.some(s => s.status === 'accident') && <span className="text-red-500 text-xs font-bold ml-2">⚠️ ACCIDENT</span>}
+                                                            </div>
+                                                            <div className="text-sm text-gray-600">HN: {customer.hn} | เบอร์: {customer.phone}</div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-4">
+                                                        {getStatusBadge(customer.status)}
+                                                        <span className="text-sm text-gray-600 flex items-center gap-1">
+                                                            <span>⏱️</span> {customer.timestamp}
+                                                        </span>
+                                                        {customer.status === 'waiting' && (
+                                                            <button onClick={() => startTracking(customer)} className="px-6 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 font-medium shadow-md">เริ่ม Track →</button>
+                                                        )}
+                                                        {customer.status === 'in-service' && (
+                                                            <button onClick={() => setView('tracking')} className="px-6 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 font-medium shadow-md text-xs">กลับไป Track</button>
+                                                        )}
+                                                        {customer.status === 'completed' && (
+                                                            <span className="px-6 py-2 text-green-600 font-medium">✓ เสร็จสิ้น</span>
+                                                        )}
+                                                        {/* ปุ่มลบสำหรับ Admin ทุกสถานะ */}
+                                                        {currentUser.role === 'admin' && (
+                                                            <button onClick={() => deleteCustomer(customer)} className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 font-medium shadow-md text-sm">🗑️ ลบ</button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                
+                                                {/* Dropdown รายละเอียด (เฉพาะ Admin) */}
+                                                {currentUser.role === 'admin' && expandedCustomer === customer.hn && (
+                                                    <div className={`border-l-4 border-r border-b rounded-b-lg p-4 bg-gray-50 ${getStatusColor(customer.status)}`}>
+                                                        {customer.status === 'waiting' && (
+                                                            <div className="text-sm text-gray-600">
+                                                                <p className="font-semibold mb-2">📌 สถานะ: รอคิว</p>
+                                                                <p>ลูกค้ายังไม่ได้เริ่มรับบริการ</p>
+                                                            </div>
+                                                        )}
+                                                        
+                                                        {customer.status === 'in-service' && (
+                                                            <div className="text-sm">
+                                                                <p className="font-semibold mb-3 text-orange-700">📋 กำลังรับบริการ</p>
+                                                                {customer.sessions && customer.sessions.length > 0 ? (
+                                                                    <div className="space-y-2">
+                                                                        <p className="font-semibold text-gray-700">ขั้นตอนที่ผ่านมาแล้ว:</p>
+                                                                        {customer.sessions.map((session, idx) => (
+                                                                            <div key={idx} className={`p-2 rounded ${session.status === 'accident' ? 'bg-red-100 border border-red-300' : 'bg-white border border-gray-200'}`}>
+                                                                                <div className="flex justify-between items-start">
+                                                                                    <span className="font-medium text-gray-800">{idx + 1}. {session.session}</span>
+                                                                                    <span className="text-xs text-gray-600">{session.startTime}</span>
+                                                                                </div>
+                                                                                <div className="text-xs text-gray-600 mt-1">
+                                                                                    ⏱️ ใช้เวลา: <span className="font-semibold">{session.duration}</span>
+                                                                                </div>
+                                                                                {session.note && (
+                                                                                    <div className={`text-xs mt-1 ${session.status === 'accident' ? 'text-red-700 font-bold' : 'text-gray-600'}`}>
+                                                                                        📝 {session.note}
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        ))}
+                                                                        <div className="mt-3 p-2 bg-orange-100 rounded border border-orange-300">
+                                                                            <p className="text-orange-800 font-semibold">🔄 กำลังดำเนินการ...</p>
+                                                                        </div>
+                                                                    </div>
+                                                                ) : (
+                                                                    <p className="text-gray-600">เพิ่งเริ่มรับบริการ ยังไม่มีข้อมูลขั้นตอน</p>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                        
+                                                        {customer.status === 'completed' && (
+                                                            <div className="text-sm">
+                                                                <p className="font-semibold mb-3 text-green-700">✓ เสร็จสิ้นการบริการ</p>
+                                                                {customer.sessions && customer.sessions.length > 0 ? (
+                                                                    <div className="space-y-2">
+                                                                        {customer.sessions.map((session, idx) => (
+                                                                            <div key={idx} className={`p-3 rounded ${session.status === 'accident' ? 'bg-red-50 border-2 border-red-400' : 'bg-white border border-gray-200'}`}>
+                                                                                <div className="flex justify-between items-start mb-1">
+                                                                                    <span className="font-medium text-gray-800">{idx + 1}. {session.session}</span>
+                                                                                    <span className="text-xs text-gray-600">{session.startTime}</span>
+                                                                                </div>
+                                                                                <div className="text-xs text-gray-600">
+                                                                                    ⏱️ ใช้เวลา: <span className="font-semibold text-gray-800">{session.duration}</span>
+                                                                                </div>
+                                                                                {session.note && (
+                                                                                    <div className={`text-xs mt-2 p-2 rounded ${session.status === 'accident' ? 'bg-red-100 text-red-800 font-bold' : 'bg-gray-100 text-gray-700'}`}>
+                                                                                        📝 {session.note}
+                                                                                    </div>
+                                                                                )}
+                                                                                {session.status === 'accident' && (
+                                                                                    <div className="mt-1 text-xs font-bold text-red-600">
+                                                                                        ⚠️ มีเหตุการณ์ Accident
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        ))}
+                                                                        <div className="mt-3 pt-3 border-t border-gray-300">
+                                                                            <div className="flex justify-between text-xs text-gray-600">
+                                                                                <span>รวมทั้งหมด:</span>
+                                                                                <span className="font-bold">{customer.sessions.length} ขั้นตอน</span>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                ) : (
+                                                                    <p className="text-gray-600">ไม่มีข้อมูลการบริการ</p>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))
+                                    }
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Modal ลบลูกค้า */}
+                        {showDeleteModal && (
+                            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                                <div className="bg-white rounded-2xl p-8 max-w-md w-full mx-4">
+                                    <h3 className="text-2xl font-bold text-gray-900 mb-4">🗑️ ยืนยันการลบลูกค้า</h3>
+                                    <div className="mb-4 p-4 bg-red-50 rounded-lg border border-red-200">
+                                        <p className="text-sm text-gray-700"><strong>ลูกค้า:</strong> {customerToDelete?.name}</p>
+                                        <p className="text-sm text-gray-700"><strong>HN:</strong> {customerToDelete?.hn}</p>
+                                        <p className="text-sm text-gray-700"><strong>สถานะ:</strong> {
+                                            customerToDelete?.status === 'waiting' ? 'รอคิว' :
+                                            customerToDelete?.status === 'in-service' ? 'กำลังรับบริการ' : 'เสร็จสิ้น'
+                                        }</p>
+                                    </div>
+                                    <p className="text-gray-600 mb-4 text-sm">กรุณาระบุเหตุผลในการลบ</p>
+                                    <textarea 
+                                        value={deleteNote} 
+                                        onChange={(e) => setDeleteNote(e.target.value)} 
+                                        placeholder="เช่น: ลงทะเบียนผิด, ลูกค้ายกเลิก..." 
+                                        className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:outline-none mb-4" 
+                                        rows="3" 
+                                    />
+                                    <div className="flex gap-4">
+                                        <button 
+                                            onClick={() => { setShowDeleteModal(false); setDeleteNote(''); setCustomerToDelete(null); }} 
+                                            className="flex-1 py-3 bg-gray-300 text-gray-700 rounded-xl hover:bg-gray-400 font-bold"
+                                        >
+                                            ยกเลิก
+                                        </button>
+                                        <button 
+                                            onClick={confirmDelete} 
+                                            className="flex-1 py-3 bg-red-500 text-white rounded-xl hover:bg-red-600 font-bold"
+                                        >
+                                            ยืนยันการลบ
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {showUserModal && (
+                            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                                <div className="bg-white rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
+                                    <div className="p-6 border-b flex justify-between items-center bg-gray-50">
+                                        <h3 className="text-xl font-bold text-gray-800">จัดการพนักงาน</h3>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => { setShowAddForm(!showAddForm); setEditingUser(null); }} className="bg-pink-500 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md">
+                                                {showAddForm ? '✕ ปิดฟอร์ม' : '+ เพิ่มพนักงานใหม่'}
+                                            </button>
+                                            <button onClick={() => setShowUserModal(false)} className="text-gray-400 hover:text-black text-2xl px-2">✕</button>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex-1 overflow-y-auto p-6">
+                                        {showAddForm && (
+                                            <div className="mb-8 p-6 bg-pink-50 rounded-xl border-2 border-pink-200">
+                                                <h4 className="font-bold text-pink-700 mb-4">{editingUser ? 'แก้ไขพนักงาน: ' + editingUser.name : 'ลงทะเบียนพนักงานใหม่'}</h4>
+                                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                                                    <input type="text" placeholder="ชื่อ-นามสกุล" className="p-3 border rounded-xl" value={newName} onChange={e => setNewName(e.target.value)} />
+                                                    <input type="text" placeholder="Username" className="p-3 border rounded-xl" value={newUsername} onChange={e => setNewUsername(e.target.value)} />
+                                                    <input type="text" placeholder="Password" className="p-3 border rounded-xl" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+                                                    <select className="p-3 border rounded-xl bg-white" value={newRole} onChange={e => setNewRole(e.target.value)}>
+                                                        <option value="staff">พนักงานทั่วไป</option>
+                                                        <option value="admin">ผู้ดูแลระบบ</option>
+                                                    </select>
+                                                </div>
+                                                <div className="mb-4">
+                                                    <p className="text-xs font-bold text-gray-500 mb-2 uppercase">เลือกสาขาที่อนุญาตให้เข้าถึง:</p>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {BRANCHES.map(b => (
+                                                            <button key={b.code} onClick={() => toggleBranch(b.code)} className={`px-3 py-1 rounded-full text-[11px] font-bold border transition-all ${newAllowedBranches.includes(b.code) ? 'bg-pink-500 text-white border-pink-500 shadow-md' : 'bg-white text-gray-400 border-gray-200 hover:border-pink-300'}`}>
+                                                                {b.name}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                                <div className="flex justify-end gap-3 border-t pt-4">
+                                                    <button onClick={resetUserForm} className="px-4 py-2 text-gray-400 font-bold">ยกเลิก</button>
+                                                    <button onClick={editingUser ? handleUpdateUser : handleAddUser} className="bg-gray-800 text-white px-8 py-2 rounded-xl font-bold shadow-lg">
+                                                        {editingUser ? 'บันทึกการแก้ไข' : 'ยืนยันเพิ่มพนักงาน'}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div className="border rounded-xl overflow-hidden shadow-sm bg-white">
+                                            <table className="w-full text-left text-sm">
+                                                <thead className="bg-gray-800 text-white">
+                                                    <tr>
+                                                        <th className="p-4 font-bold">พนักงาน</th>
+                                                        <th className="p-4 font-bold">User / Pass</th>
+                                                        <th className="p-4 font-bold text-center">สาขา</th>
+                                                        <th className="p-4 font-bold">สถานะ</th>
+                                                        <th className="p-4 font-bold text-right">การจัดการ</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-100">
+                                                    {users.map(u => (
+                                                        <tr key={u.id} className={`hover:bg-gray-50 ${u.status === 'suspended' ? 'bg-gray-50 opacity-60' : ''}`}>
+                                                            <td className="p-4 font-bold text-gray-800 cursor-pointer hover:text-pink-600" onClick={() => handleEditClick(u)}>
+                                                                <div className="flex items-center gap-2"><i className="fa-solid fa-user-circle text-gray-400"></i> {u.name}</div>
+                                                            </td>
+                                                            <td className="p-4 font-mono"><span className="text-blue-600">U: {u.username}</span><br/><span className="text-gray-500">P: {u.password}</span></td>
+                                                            <td className="p-4"><div className="flex flex-wrap gap-1 justify-center max-w-[250px] mx-auto">
+                                                                {u.allowedBranches.map(bc => (<span key={bc} className="px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-[9px] font-bold">{BRANCHES.find(b => b.code === bc)?.name}</span>))}
+                                                            </div></td>
+                                                            <td className="p-4 font-bold">{u.status === 'active' ? <span className="text-green-600">● ปกติ</span> : <span className="text-red-500">● ระงับ</span>}</td>
+                                                            <td className="p-4 text-right">
+                                                                <div className="flex gap-2 justify-end">
+                                                                    <button onClick={() => toggleUserStatus(u.id)} className={`px-2 py-1 rounded text-[10px] text-white font-bold shadow-sm ${u.status === 'active' ? 'bg-orange-400' : 'bg-green-500'}`}>{u.status === 'active' ? 'ระงับ' : 'เปิด'}</button>
+                                                                    <button onClick={() => deleteUser(u.id)} className="px-2 py-1 bg-red-500 text-white rounded text-[10px] font-bold shadow-sm">ลบ</button>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            }
+
+            if (view === 'history') {
+                const historyList = customers.filter(c => c.branch === selectedBranch && new Date(c.registeredAt).toISOString().split('T')[0] === historyDate);
+                return (
+                    <div className="min-h-screen bg-gray-50 p-6">
+                        <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-xl p-8">
+                            <div className="flex justify-between items-center mb-6">
+                                <button onClick={() => setView('dashboard')} className="text-red-600 font-bold">← กลับ Dashboard</button>
+                                <h2 className="text-2xl font-bold">📜 ประวัติการเข้าบริการ</h2>
+                                <input type="date" value={historyDate} onChange={(e) => setHistoryDate(e.target.value)} className="border p-2 rounded-lg outline-none"/>
+                            </div>
+                            <div className="space-y-4">
+                                {historyList.length === 0 ? <div className="text-center py-20 text-gray-400">ไม่พบข้อมูลในวันที่ระบุ</div> : 
+                                historyList.map((c, i) => (
+                                    <div key={i} className="p-4 border rounded-xl bg-white hover:shadow-md transition-shadow">
+                                        <div className="flex justify-between font-bold text-gray-900">
+                                            <span>{c.name} (HN: {c.hn})</span>
+                                            <span className="text-sm text-gray-400">{c.timestamp} น.</span>
+                                        </div>
+                                        <div className="mt-3 grid grid-cols-1 gap-2">
+                                            {c.sessions?.map((s, si) => (
+                                                <div key={si} className={`text-xs p-2 rounded ${s.status === 'accident' ? 'bg-red-50 text-red-700 font-bold' : 'bg-gray-50 text-gray-600'}`}>
+                                                    • {s.session}: ใช้เวลา {s.duration} {s.note && `[บันทึก: ${s.note}]`}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (view === 'deleted') {
+                const filteredDeletedCustomers = deletedFilterDate 
+                    ? deletedCustomers.filter(c => c.branch === selectedBranch && c.deletedDate === deletedFilterDate)
+                    : deletedCustomers.filter(c => c.branch === selectedBranch);
+
+                return (
+                    <div className="min-h-screen bg-gray-50 p-6">
+                        <div className="max-w-6xl mx-auto bg-white rounded-2xl shadow-xl p-8">
+                            <div className="flex justify-between items-center mb-6">
+                                <button onClick={() => setView('dashboard')} className="text-red-600 font-bold">← กลับ Dashboard</button>
+                                <h2 className="text-2xl font-bold">🗑️ ข้อมูลลูกค้าที่ถูกลบ</h2>
+                                <div className="flex items-center gap-2">
+                                    <label className="text-sm text-gray-600 font-semibold">กรองตามวันที่:</label>
+                                    <input 
+                                        type="date" 
+                                        value={deletedFilterDate} 
+                                        onChange={(e) => setDeletedFilterDate(e.target.value)} 
+                                        className="border-2 border-gray-300 p-2 rounded-lg outline-none focus:border-red-500"
+                                    />
+                                    {deletedFilterDate && (
+                                        <button 
+                                            onClick={() => setDeletedFilterDate('')} 
+                                            className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-sm"
+                                        >
+                                            ✕ ล้าง
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="space-y-3">
+                                {filteredDeletedCustomers.length === 0 ? (
+                                    <div className="text-center py-20 text-gray-400">
+                                        <div className="text-6xl mb-4">📋</div>
+                                        <p className="text-lg">ไม่มีข้อมูลที่ถูกลบ</p>
+                                    </div>
+                                ) : (
+                                    filteredDeletedCustomers.map((customer, idx) => (
+                                        <div key={idx}>
+                                            <div className="flex items-center justify-between p-4 border-2 border-red-300 bg-red-50 rounded-lg hover:shadow-md transition-shadow">
+                                                <div className="flex items-center gap-4">
+                                                    <button 
+                                                        onClick={() => toggleDeletedCustomerDetails(customer.hn)}
+                                                        className="text-gray-600 hover:text-gray-900 transition-transform"
+                                                    >
+                                                        <span className={`text-xl transition-transform inline-block ${expandedDeletedCustomer === customer.hn ? 'rotate-90' : ''}`}>▶</span>
+                                                    </button>
+                                                    <div className="w-12 h-12 bg-red-200 rounded-full flex items-center justify-center">
+                                                        <span className="text-xl">🗑️</span>
+                                                    </div>
+                                                    <div>
+                                                        <div className="font-bold text-gray-900 text-lg">
+                                                            {customer.name}
+                                                            {customer.sessions?.some(s => s.status === 'accident') && <span className="text-red-500 text-xs font-bold ml-2">⚠️ ACCIDENT</span>}
+                                                        </div>
+                                                        <div className="text-sm text-gray-600">HN: {customer.hn} | เบอร์: {customer.phone}</div>
+                                                        <div className="text-xs text-red-600 mt-1">
+                                                            ลบโดย: {customer.deletedBy} | วันที่: {new Date(customer.deletedAt).toLocaleDateString('th-TH')} {new Date(customer.deletedAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-4">
+                                                    <button 
+                                                        onClick={() => restoreCustomer(customer)} 
+                                                        className="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 font-medium shadow-md"
+                                                    >
+                                                        ↩️ กู้คืน
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Dropdown รายละเอียด */}
+                                            {expandedDeletedCustomer === customer.hn && (
+                                                <div className="border-l-4 border-r-2 border-b-2 border-red-300 rounded-b-lg p-4 bg-red-50">
+                                                    <div className="mb-4 p-3 bg-white rounded-lg border-2 border-red-200">
+                                                        <p className="font-semibold text-red-700 mb-2">📝 เหตุผลในการลบ:</p>
+                                                        <p className="text-gray-700">{customer.deleteNote}</p>
+                                                    </div>
+
+                                                    <div className="text-sm">
+                                                        <p className="font-semibold mb-2 text-gray-700">📋 ข้อมูลการบริการ:</p>
+                                                        <div className="mb-3 p-2 bg-white rounded">
+                                                            <p><strong>สถานะเมื่อถูกลบ:</strong> {
+                                                                customer.status === 'waiting' ? '🟡 รอคิว' :
+                                                                customer.status === 'in-service' ? '🟠 กำลังรับบริการ' : '🟢 เสร็จสิ้น'
+                                                            }</p>
+                                                            <p><strong>ลงทะเบียนเมื่อ:</strong> {customer.timestamp}</p>
+                                                        </div>
+
+                                                        {customer.sessions && customer.sessions.length > 0 ? (
+                                                            <div className="space-y-2">
+                                                                <p className="font-semibold text-gray-700">ประวัติการรับบริการ:</p>
+                                                                {customer.sessions.map((session, idx) => (
+                                                                    <div key={idx} className={`p-3 rounded ${session.status === 'accident' ? 'bg-red-100 border-2 border-red-400' : 'bg-white border border-gray-200'}`}>
+                                                                        <div className="flex justify-between items-start mb-1">
+                                                                            <span className="font-medium text-gray-800">{idx + 1}. {session.session}</span>
+                                                                            <span className="text-xs text-gray-600">{session.startTime}</span>
+                                                                        </div>
+                                                                        <div className="text-xs text-gray-600">
+                                                                            ⏱️ ใช้เวลา: <span className="font-semibold text-gray-800">{session.duration}</span>
+                                                                        </div>
+                                                                        {session.note && (
+                                                                            <div className={`text-xs mt-2 p-2 rounded ${session.status === 'accident' ? 'bg-red-200 text-red-800 font-bold' : 'bg-gray-100 text-gray-700'}`}>
+                                                                                📝 {session.note}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        ) : (
+                                                            <p className="text-gray-600 bg-white p-2 rounded">ไม่มีประวัติการรับบริการ</p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (view === 'register') {
+                return (
+                    <div className="min-h-screen bg-gray-50 py-12 px-6">
+                        <div className="max-w-md mx-auto bg-white rounded-2xl shadow-xl p-8">
+                            <button onClick={() => setView('dashboard')} className="mb-6 text-red-600 font-medium">← ย้อนกลับ</button>
+                            <h2 className="text-2xl font-bold text-center mb-8">ลงทะเบียนลูกค้า</h2>
+                            <div className="space-y-5">
+                                <div><label className="block text-sm font-semibold text-gray-400 mb-2 uppercase">สาขา</label>
+                                <div className="p-4 bg-gray-100 border-2 rounded-xl font-bold text-gray-500 select-none">
+                                    {BRANCHES.find(b => b.code === selectedBranch)?.name}
+                                </div></div>
+                                <div><label className="block text-sm font-semibold text-gray-700 mb-2">HN</label><input type="text" value={regHN} onChange={(e) => setRegHN(e.target.value)} placeholder="กรอกหมายเลข HN" className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:outline-none text-lg" /></div>
+                                <div><label className="block text-sm font-semibold text-gray-700 mb-2">ชื่อ-นามสกุล</label><input type="text" value={regName} onChange={(e) => setRegName(e.target.value)} placeholder="กรอกชื่อ-นามสกุล" className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:outline-none text-lg" /></div>
+                                <div><label className="block text-sm font-semibold text-gray-700 mb-2">เบอร์โทรศัพท์</label><input type="tel" value={regPhone} onChange={(e) => setRegPhone(e.target.value)} placeholder="กรอกเบอร์โทรศัพท์" className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-red-500 focus:outline-none text-lg" /></div>
+                                <button onClick={registerCustomer} className="w-full py-4 bg-red-500 text-white rounded-xl hover:bg-red-600 font-bold text-lg mt-8 shadow-lg">✓ ยืนยันลงทะเบียน</button>
+                            </div>
+                        </div>
+
+                        {showSuccessModal && (
+                            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                                <div className="bg-white rounded-2xl p-8 max-w-sm w-full mx-4 text-center animate-bounce">
+                                    <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <span className="text-5xl">✓</span>
+                                    </div>
+                                    <h3 className="text-2xl font-bold text-gray-900 mb-2">ลงทะเบียนสำเร็จ!</h3>
+                                    <p className="text-gray-600">กำลังกลับไปหน้าหลัก...</p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            }
+
+            if (view === 'selectProcedure') {
+                return (
+                    <div className="min-h-screen bg-gray-50 p-6"><div className="max-w-3xl mx-auto"><div className="bg-white rounded-2xl shadow-xl p-8">
+                        <button onClick={backToDashboard} className="mb-6 text-red-600 hover:text-red-700 font-medium">← ย้อนกลับ</button>
+                        <div className="mb-8"><h2 className="text-3xl font-bold text-gray-900 mb-2">เลือกหัตถการ</h2><div className="bg-red-50 p-4 rounded-lg mt-4"><p className="text-gray-700"><strong>ลูกค้า:</strong> {currentCustomer.name} | <strong className="ml-2">HN:</strong> {currentCustomer.hn}</p></div></div>
+                        <div className="grid grid-cols-2 gap-4">
+                            {Object.keys(PROCEDURES).map(proc => (<button key={proc} onClick={() => selectProcedure(proc)} className="p-6 bg-red-50 hover:bg-red-100 rounded-xl font-medium text-lg text-gray-900 transition-all border-2 border-red-200 hover:border-red-500"><div className="font-bold text-xl mb-2">{proc}</div><div className="text-sm text-gray-600">{PROCEDURES[proc].length} ขั้นตอน</div></button>))}
+                        </div>
+                    </div></div></div>
+                );
+            }
+
+            if (view === 'tracking') {
+                const currentPath = PROCEDURES[procedure];
+                return (
+                    <div className="min-h-screen bg-gray-50 p-6">
+                        <div className="max-w-4xl mx-auto">
+                            <div className="bg-white rounded-2xl shadow-xl p-8">
+                                <button onClick={backToDashboard} className="mb-6 text-red-600 hover:text-red-700 font-medium flex items-center gap-2">← ย้อนกลับ Dashboard</button>
+                                <div className="mb-6 p-4 bg-red-50 rounded-xl border border-red-200">
+                                    <div className="text-sm text-gray-700"><strong>ลูกค้า:</strong> {currentCustomer.name} | <strong className="ml-2">หัตถการ:</strong> {procedure}</div>
+                                </div>
+                                <div className="mb-8">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <span className="text-sm font-semibold text-gray-600">ความคืบหน้า</span>
+                                        <span className="text-sm font-bold text-red-600">{currentSessionIndex + 1} / {currentPath.length}</span>
+                                    </div>
+                                    <div className="w-full bg-gray-200 rounded-full h-3">
+                                        <div className="bg-red-500 h-3 rounded-full transition-all" style={{width: `${((currentSessionIndex + 1) / currentPath.length) * 100}%`}} />
+                                    </div>
+                                </div>
+                                <div className="mb-8">
+                                    <h3 className="text-2xl font-bold text-gray-900 mb-4">ขั้นตอน: {currentPath[currentSessionIndex]}</h3>
+                                    <div className="bg-gray-50 rounded-xl p-6 mb-6">
+                                        <div className="text-center">
+                                            <div className="text-6xl font-bold text-red-600 mb-2">{formatTime(elapsedTime)}</div>
+                                            <div className="text-gray-600">เวลาที่ใช้</div>
+                                        </div>
+                                    </div>
+                                    {!startTime ? (
+                                        <button onClick={startSession} className="w-full py-4 bg-green-500 text-white rounded-xl font-bold text-lg shadow-lg">▶ เริ่มจับเวลา</button>
+                                    ) : (
+                                        <div className="space-y-4">
+                                            <div>
+                                                <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="ระบุหมายเหตุย่อย..." className="w-full p-4 border-2 border-gray-200 rounded-xl focus:outline-none" rows="2" />
+                                            </div>
+                                            <div className="flex gap-4">
+                                                <button onClick={stopSession} className="flex-1 py-4 bg-red-500 text-white rounded-xl font-bold text-lg shadow-lg">⏹ หยุด & บันทึก</button>
+                                                <button onClick={() => setShowAccidentModal(true)} className="flex-1 py-4 bg-yellow-500 text-white rounded-xl font-bold text-lg shadow-lg">⚠️ Accident</button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {showAccidentModal && (
+                            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                                <div className="bg-white rounded-2xl p-8 max-w-md w-full mx-4">
+                                    <h3 className="text-2xl font-bold text-gray-900 mb-4">⚠️ รายงาน Accident</h3>
+                                    <p className="text-gray-600 mb-4 text-sm">กรุณาระบุรายละเอียดของเหตุการณ์</p>
+                                    <textarea 
+                                        value={accidentNote} 
+                                        onChange={(e) => setAccidentNote(e.target.value)} 
+                                        placeholder="กรอกรายละเอียด Accident..." 
+                                        className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-yellow-500 focus:outline-none mb-4" 
+                                        rows="4" 
+                                    />
+                                    <div className="flex gap-4">
+                                        <button 
+                                            onClick={() => { setShowAccidentModal(false); setAccidentNote(''); }} 
+                                            className="flex-1 py-3 bg-gray-300 text-gray-700 rounded-xl hover:bg-gray-400 font-bold"
+                                        >
+                                            ยกเลิก
+                                        </button>
+                                        <button 
+                                            onClick={handleAccident} 
+                                            className="flex-1 py-3 bg-yellow-500 text-white rounded-xl hover:bg-yellow-600 font-bold"
+                                        >
+                                            บันทึก Accident
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            }
+
+            return null;
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('app'));
+        root.render(<App />);
+    </script>
 </body>
 </html>
-
